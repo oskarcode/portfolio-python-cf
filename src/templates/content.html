@@ -1,0 +1,39 @@
+{% extends 'base.html' %}
+{% block title %}Published Content - Oskar Ablimit{% endblock %}
+{% block content %}
+<h2 class="page-header mb-4">Published Content</h2>
+<p class="text-muted mb-5" style="max-width: 600px;">Articles, tutorials, and insights I've shared online.</p>
+
+<div class="row g-4">
+    {% for item in content %}
+    <div class="col-md-6 col-lg-4">
+        <a href="{{ item.url }}" target="_blank" class="text-decoration-none">
+            <div class="card h-100 p-4">
+                <div class="d-flex align-items-start">
+                    {% if item.platform == "Medium" %}
+                    <div class="rounded-3 p-2 me-3" style="background: linear-gradient(135deg, #00ab6c 0%, #02c97e 100%);">
+                        <i class="bi bi-medium text-white"></i>
+                    </div>
+                    {% else %}
+                    <div class="rounded-3 p-2 me-3" style="background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);">
+                        <i class="bi bi-journal-text text-white"></i>
+                    </div>
+                    {% endif %}
+                    <div class="flex-grow-1">
+                        <span class="badge mb-2" style="background: var(--gray-100); color: var(--gray-600);">{{ item.platform }}</span>
+                        <h6 class="fw-bold mb-0" style="line-height: 1.5;">{{ item.title }}</h6>
+                    </div>
+                    <i class="bi bi-arrow-up-right text-muted ms-2"></i>
+                </div>
+            </div>
+        </a>
+    </div>
+    {% else %}
+    <div class="col-12">
+        <div class="card p-5 text-center">
+            <p class="text-muted mb-0">No published content found.</p>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endblock %} 

@@ -1,0 +1,143 @@
+{% extends 'base.html' %}
+
+{% block title %}Resume - Portfolio{% endblock %}
+{% block content %}
+<div class="row justify-content-center mb-4">
+    <div class="col-12 text-center mb-4">
+        <img src="https://techsaleszappa.s3.amazonaws.com/home/profile.jpg" class="img-fluid rounded-circle shadow-lg border border-3 border-primary mb-3" alt="Profile" style="max-width: 180px; background: #fff; padding: 8px;">
+    </div>
+    <div class="col-lg-8">
+        <div class="card shadow-lg border-0 mb-4" style="background: linear-gradient(135deg, #f8fafc 80%, #e3f2fd 100%);">
+            <div class="card-body p-5">
+                <div class="mb-4">
+                    <h3 class="fw-bold mb-2"><i class="bi bi-person-lines-fill text-primary me-2"></i>Summary</h3>
+                    <p class="mb-2"
+                       {% if resume.styling %}
+                           {% if resume.styling.text_color %}
+                               style="color: {{ resume.styling.text_color }};"
+                           {% elif resume.styling.color %}
+                               style="color: {{ resume.styling.color }};"
+                           {% endif %}
+                       {% endif %}>
+                       {{ resume.summary|default("No summary provided.") }}
+                    </p>
+                </div>
+                <div class="mb-4">
+                    <h4 class="fw-bold mb-3"><i class="bi bi-briefcase-fill text-success me-2"></i>Employment History</h4>
+                    {% if resume.employment_history %}
+                        {% for job in resume.employment_history %}
+                            <div class="card mb-3 border-0 shadow-sm">
+                                <div class="card-body">
+                                    {% if job.title %}
+                                        <h5 class="fw-bold mb-1">{{ job.title }}</h5>
+                                    {% endif %}
+                                    <div class="mb-1">
+                                        {% if job.company %}<span class="badge bg-primary me-2">{{ job.company }}</span>{% endif %}
+                                        {% if job.period %}<span class="text-muted me-2"><i class="bi bi-calendar-event me-1"></i>{{ job.period }}</span>{% endif %}
+                                        {% if job.location %}<span class="text-muted"><i class="bi bi-geo-alt me-1"></i>{{ job.location }}</span>{% endif %}
+                                    </div>
+                                    {% if job.description %}
+                                        <div class="mt-2" style="font-size: 1.05rem; color: #374151;">{{ job.description }}</div>
+                                    {% endif %}
+                                    {% if job.title == 'Adjunct Professor' %}
+                                            <div class="mt-2">
+                                                <a href="https://cloudteaching.oskarcode.com/" class="btn btn-sm btn-outline-primary" target="_blank"><i class="bi bi-link-45deg me-1"></i>Details</a>
+                                            </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        {% else %}
+                            <div class="text-muted">No employment history found.</div>
+                        {% endfor %}
+                    {% else %}
+                        <div class="text-muted">No employment history found.</div>
+                    {% endif %}
+                </div>
+                <div class="mb-4">
+                    <h4 class="fw-bold mb-3"><i class="bi bi-mortarboard-fill text-warning me-2"></i>Education</h4>
+                    {% if resume.education %}
+                        {% for edu in resume.education %}
+                            {% if edu.title or edu.degree or edu.institution or edu.period %}
+                                <div class="mb-2">
+                                    <span class="fw-semibold">
+                                        {% if edu.degree %}{{ edu.degree }}
+                                        {% elif edu.title %}{{ edu.title }}
+                                        {% endif %}
+                                    </span>
+                                    {% if edu.institution %} at <span class="text-primary">{{ edu.institution }}</span>{% endif %}
+                                    {% if edu.period %}<span class="text-muted ms-2"><i class="bi bi-calendar-event me-1"></i>{{ edu.period }}</span>{% endif %}
+                                </div>
+                                {% if edu.description %}<div class="text-muted mb-2">{{ edu.description }}</div>{% endif %}
+                                {% if edu.degree == 'Master of Engineering in Cloud Computing Management' %}
+                                        <div class="mb-2">
+                                            <a href="https://gwu-course-review.mycodeforever.com/" class="btn btn-sm btn-outline-primary" target="_blank"><i class="bi bi-link-45deg me-1"></i>Details</a>
+                                        </div>
+                                {% endif %}
+                            {% else %}
+                                <div class="mb-2">{{ edu }}</div>
+                            {% endif %}
+                        {% else %}
+                            <div class="text-muted">No education found.</div>
+                        {% endfor %}
+                    {% else %}
+                        <div class="text-muted">No education found.</div>
+                    {% endif %}
+                </div>
+                <div class="mb-4">
+                    <h4 class="fw-bold mb-3"><i class="bi bi-award-fill text-info me-2"></i>Certifications</h4>
+                    {% if resume.certifications %}
+                        <ul class="list-group list-group-flush mb-2">
+                            {% for cert in resume.certifications %}
+                                {% if cert.name or cert.issuer or cert.period %}
+                                    <li class="list-group-item bg-transparent border-0 ps-0">
+                                        <span class="fw-semibold">{{ cert.name }}</span>
+                                        {% if cert.issuer %}<span class="text-primary ms-2">({{ cert.issuer }})</span>{% endif %}
+                                        {% if cert.period %}<span class="text-muted ms-2"><i class="bi bi-calendar-event me-1"></i>{{ cert.period }}</span>{% endif %}
+                                    </li>
+                                {% else %}
+                                    <li class="list-group-item bg-transparent border-0 ps-0">{{ cert }}</li>
+                                {% endif %}
+                            {% else %}
+                                <li class="list-group-item text-muted bg-transparent border-0">No certifications found.</li>
+                            {% endfor %}
+                        </ul>
+                    {% else %}
+                        <div class="text-muted">No certifications found.</div>
+                    {% endif %}
+                </div>
+                <div class="mb-4">
+                    <h4 class="fw-bold mb-3"><i class="bi bi-stars text-danger me-2"></i>Skills</h4>
+                    <div>
+                        {% if resume.my_skills %}
+                            {{ resume.my_skills|safe }}
+                        {% else %}
+                            <span class="badge bg-secondary">No skills listed.</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="mb-4">
+                    <h4 class="fw-bold mb-3"><i class="bi bi-translate text-secondary me-2"></i>Languages</h4>
+                    {% if resume.languages %}
+                        <ul class="list-group list-group-flush mb-2">
+                            {% for lang in resume.languages %}
+                                {% if lang.language or lang.proficiency %}
+                                    <li class="list-group-item bg-transparent border-0 ps-0">
+                                        <span class="fw-semibold">{{ lang.language }}</span>
+                                        {% if lang.proficiency %}<span class="text-muted ms-2">({{ lang.proficiency }})</span>{% endif %}
+                                    </li>
+                                {% else %}
+                                    <li class="list-group-item bg-transparent border-0 ps-0">{{ lang }}</li>
+                                {% endif %}
+                            {% else %}
+                                <li class="list-group-item text-muted bg-transparent border-0">No languages found.</li>
+                            {% endfor %}
+                        </ul>
+                    {% else %}
+                        <div class="text-muted">No languages found.</div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 

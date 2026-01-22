@@ -1,0 +1,46 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+.venv-workers/
+venv/
+ENV/
+env/
+
+# Node
+node_modules/
+npm-debug.log
+
+# Wrangler / Cloudflare
+.wrangler/
+.dev.vars
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# Environment & Secrets
+.env
+.env.local
+*.pem
+*.key
+
+# Build artifacts
+dist/
+build/
+*.egg-info/
+
+# Logs
+*.log
+
+# Python modules (vendored)
+python_modules/
+
+# Lock files (optional - remove if you want to track)
+# uv.lock

@@ -1,0 +1,56 @@
+{% extends 'base.html' %}
+{% block title %}Projects - Oskar Ablimit{% endblock %}
+{% block content %}
+<h2 class="page-header mb-4">Projects</h2>
+<p class="text-muted mb-5" style="max-width: 600px;">A showcase of technical projects demonstrating various skills and technologies.</p>
+
+<div class="row g-4">
+    {% for project in projects %}
+    <div class="col-md-6 col-lg-4">
+        <div class="card h-100">
+            <div class="card-body p-4 d-flex flex-column">
+                <h5 class="fw-bold mb-3">{{ project.title }}</h5>
+                
+                {% if project.use_case %}
+                <p class="mb-3" style="color: var(--gray-600); font-size: 0.95rem;">{{ project.use_case }}</p>
+                {% endif %}
+                
+                <div class="d-flex flex-wrap gap-2 mb-3">
+                    {% if project.frontend %}
+                    <span class="badge" style="background: rgba(16, 185, 129, 0.1); color: #059669;">
+                        <i class="bi bi-window me-1"></i>{{ project.frontend }}
+                    </span>
+                    {% endif %}
+                    {% if project.backend %}
+                    <span class="badge" style="background: rgba(245, 158, 11, 0.1); color: #d97706;">
+                        <i class="bi bi-server me-1"></i>{{ project.backend }}
+                    </span>
+                    {% endif %}
+                    {% if project.hosting %}
+                    <span class="badge" style="background: rgba(14, 165, 233, 0.1); color: #0284c7;">
+                        <i class="bi bi-cloud me-1"></i>{{ project.hosting }}
+                    </span>
+                    {% endif %}
+                </div>
+                
+                {% if project.description %}
+                <p class="small text-muted mb-3 flex-grow-1">{{ project.description }}</p>
+                {% endif %}
+                
+                {% if project.link %}
+                <a href="{{ project.link }}" class="btn btn-primary btn-sm mt-auto align-self-start" target="_blank">
+                    <i class="bi bi-box-arrow-up-right me-1"></i>View Project
+                </a>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    {% else %}
+    <div class="col-12">
+        <div class="card p-5 text-center">
+            <p class="text-muted mb-0">No projects found.</p>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endblock %} 

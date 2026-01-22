@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+
+{% block title %}Chat - Portfolio{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="row justify-content-center">
+        <div class="col-lg-8">
+            <div class="card shadow-sm">
+                <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">
+                        <i class="bi bi-chat-dots me-2"></i>
+                        {% if is_admin %}Admin Chat{% else %}Portfolio Assistant{% endif %}
+                    </h5>
+                    {% if is_admin %}
+                    <span class="badge bg-warning text-dark">Admin Mode</span>
+                    {% endif %}
+                </div>
+                <div class="card-body">
+                    <div id="chat-messages" style="height: 400px; overflow-y: auto; border: 1px solid #dee2e6; border-radius: 0.375rem; padding: 1rem; margin-bottom: 1rem; background: #f8f9fa;">
+                        <div class="text-muted text-center py-5">
+                            <i class="bi bi-chat-square-text fs-1"></i>
+                            <p class="mt-2">Ask me anything about this portfolio!</p>
+                        </div>
+                    </div>
+                    <form id="chat-form" class="d-flex gap-2">
+                        <input type="text" id="message-input" class="form-control" placeholder="Type your message..." autocomplete="off">
+                        <button type="submit" class="btn btn-primary" id="send-btn">
+                            <i class="bi bi-send"></i>
+                        </button>
+                    </form>
+                </div>
+            </div>
+            <div class="text-center mt-3">
+                <small class="text-muted">Powered by Claude AI with MCP</small>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.message { margin-bottom: 1rem; }
+.message-user { text-align: right; }
+.message-user .bubble { background: #0d6efd; color: white; }
+.message-assistant .bubble { background: white; border: 1px solid #dee2e6; }
+.bubble { display: inline-block; padding: 0.75rem 1rem; border-radius: 1rem; max-width: 80%; text-align: left; }
+.typing { opacity: 0.7; }
+</style>
+
+<script>
+const chatMessages = document.getElementById('chat-messages');
+const chatForm = document.getElementById('chat-form');
+const messageInput = document.getElementById('message-input');
+const sendBtn = document.getElementById('send-btn');
+const isAdmin = {{ 'true' if is_admin else 'false' }};
+let history = [];
+
+function addMessage(text, isUser) {
+    const div = document.createElement('div');
+    div.className = `message ${isUser ? 'message-user' : 'message-assistant'}`;
+    div.innerHTML = `<div class="bubble">${text.replace(/\n/g, '<br>')}</div>`;
+    chatMessages.innerHTML === '<div class="text-muted text-center py-5">' ? chatMessages.innerHTML = '' : null;
+    chatMessages.appendChild(div);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+}
+
+chatForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const message = messageInput.value.trim();
+    if (!message) return;
+    
+    addMessage(message, true);
+    history.push({ text: message, isUser: true });
+    messageInput.value = '';
+    sendBtn.disabled = true;
+    
+    addMessage('<i class="bi bi-three-dots"></i> Thinking...', false);
+    const typingMsg = chatMessages.lastChild;
+    
+    try {
+        const endpoint = isAdmin ? '/api/admin-chat' : '/api/chat';
+        const res = await fetch(endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message, history })
+        });
+        const data = await res.json();
+        typingMsg.remove();
+        
+        const response = data.response || data.error || 'No response';
+        addMessage(response, false);
+        history.push({ text: response, isUser: false });
+    } catch (err) {
+        typingMsg.remove();
+        addMessage('Error: ' + err.message, false);
+    }
+    sendBtn.disabled = false;
+    messageInput.focus();
+});
+</script>
+{% endblock %}

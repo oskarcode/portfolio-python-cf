@@ -1,0 +1,22 @@
+# Portfolio on Cloudflare Workers (Python + Jinja2 + D1)
+name = "portfolio-python-cf"
+main = "src/entry.py"
+compatibility_date = "2025-01-20"
+compatibility_flags = ["python_workers"]
+
+[observability]
+enabled = true
+
+# D1 Database binding
+[[d1_databases]]
+binding = "DB"
+database_name = "portfolio-db"
+database_id = "566c6bd4-5d87-420a-945c-a4078f39467e"
+
+# R2 bucket for media files (optional - uncomment when needed)
+# [[r2_buckets]]
+# binding = "MEDIA_BUCKET"
+# bucket_name = "portfolio-media"
+
+# Secrets (set via: wrangler secret put ANTHROPIC_API_KEY)
+# ANTHROPIC_API_KEY - Required for chat functionality

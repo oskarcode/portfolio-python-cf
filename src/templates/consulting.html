@@ -1,0 +1,88 @@
+{% extends 'base.html' %}
+
+{% block title %}Consulting - Oskar Ablimit{% endblock %}
+{% block content %}
+<h2 class="page-header mb-4">Consulting Services</h2>
+<p class="text-muted mb-5" style="max-width: 600px;">Expert guidance for tech careers, sales engineering, and global business expansion.</p>
+
+{% for service in consulting %}
+<div class="row g-4">
+    <!-- Hero Card -->
+    <div class="col-12">
+        <div class="card p-4 p-md-5" style="background: linear-gradient(135deg, var(--primary) 0%, #7c3aed 100%);">
+            <div class="text-center text-white">
+                <h3 class="fw-bold mb-3">Accelerate Your Tech Career</h3>
+                <p class="mb-4 opacity-90" style="max-width: 700px; margin: 0 auto; font-size: 1.1rem;">
+                    9+ years of proven experience across sales and solutions engineering in global markets (APAC, EMEA, North America).
+                </p>
+                <div class="d-flex flex-wrap justify-content-center gap-2 mb-4">
+                    <span class="badge rounded-pill px-3 py-2" style="background: rgba(255,255,255,0.2);">9+ Years Experience</span>
+                    <span class="badge rounded-pill px-3 py-2" style="background: rgba(255,255,255,0.2);">BDR → Enterprise AE</span>
+                    <span class="badge rounded-pill px-3 py-2" style="background: rgba(255,255,255,0.2);">Global Markets</span>
+                </div>
+                {% if service.booking_url %}
+                <a href="{{ service.booking_url }}" class="btn btn-light btn-lg px-4" target="_blank">
+                    <i class="bi bi-calendar-check me-2"></i>Book a Consultation
+                </a>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    
+    <!-- Services -->
+    {% if service.consulting_services %}
+    <div class="col-md-6">
+        <div class="card h-100 p-4">
+            <div class="d-flex align-items-center mb-3">
+                <div class="rounded-3 p-2 me-3" style="background: linear-gradient(135deg, #10b981 0%, #34d399 100%);">
+                    <i class="bi bi-clipboard-check text-white"></i>
+                </div>
+                <h5 class="fw-bold mb-0">Services Offered</h5>
+            </div>
+            <div style="font-size: 0.95rem; line-height: 1.8; color: var(--gray-700);">
+                {{ service.consulting_services|safe }}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+    
+    <!-- Pricing -->
+    {% if service.included_details %}
+    <div class="col-md-6">
+        <div class="card h-100 p-4">
+            <div class="d-flex align-items-center mb-3">
+                <div class="rounded-3 p-2 me-3" style="background: linear-gradient(135deg, #0ea5e9 0%, #38bdf8 100%);">
+                    <i class="bi bi-currency-dollar text-white"></i>
+                </div>
+                <h5 class="fw-bold mb-0">Pricing & Packages</h5>
+            </div>
+            <div style="font-size: 0.95rem; line-height: 1.8; color: var(--gray-700);">
+                {{ service.included_details|safe }}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+    
+    <!-- Why Me -->
+    {% if service.why_me %}
+    <div class="col-12">
+        <div class="card p-4">
+            <div class="d-flex align-items-center mb-3">
+                <div class="rounded-3 p-2 me-3" style="background: linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%);">
+                    <i class="bi bi-trophy text-white"></i>
+                </div>
+                <h5 class="fw-bold mb-0">Why Choose Me</h5>
+            </div>
+            <div style="font-size: 0.95rem; line-height: 1.8; color: var(--gray-700);">
+                {{ service.why_me|safe }}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% else %}
+<div class="card p-5 text-center">
+    <p class="text-muted mb-0">No consulting services found.</p>
+</div>
+{% endfor %}
+{% endblock %} 
