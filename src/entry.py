@@ -50,6 +50,16 @@ class Default(WorkerEntrypoint):
             if path == "/admin-chat":
                 return render("chat.html", is_admin=True)
             
+            # Teaching feedback redirects (shareable URLs for LinkedIn)
+            if path.startswith("/teaching/feedback/"):
+                feedback_urls = {
+                    "/teaching/feedback/1": "https://www.smartevals.com/GreatestHits/YouAreAwesome.aspx?P=216974140",  # Spring 2025
+                    "/teaching/feedback/2": "https://www.smartevals.com/GreatestHits/YouAreAwesome.aspx?P=216974140",  # Summer 2025
+                    "/teaching/feedback/3": "https://www.smartevals.com/GreatestHits/YouAreAwesome.aspx?P=216974140",  # Fall 2025
+                }
+                if path in feedback_urls:
+                    return Response(None, status=302, headers={"Location": feedback_urls[path]})
+            
             # Dynamic pages (async - fetch from DB)
             routes = {
                 "/": lambda: home(db),

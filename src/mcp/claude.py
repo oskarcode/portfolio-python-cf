@@ -28,8 +28,6 @@ READ_TOOLS = [
 
 
 
-
-
 SYSTEM_READ_ONLY = """You are a friendly assistant for Oskar Ablimit's portfolio website.
 
 IMPORTANT FORMATTING RULES:
