@@ -12,7 +12,7 @@ A Cloudflare-native portfolio for Oskar Ablimit with a professional website, an 
 - **R2** — media binding for future uploads
 - **Cloudflare Access** — required for production `/api/admin/*` requests
 
-Anonymous messages are held only in React state and sent as bounded context to a stateless endpoint. They disappear on refresh. When a visitor explicitly adds Oskar and consents, the transcript moves into a Pi Durable workspace and a D1 lead points to it.
+Anonymous messages are held only in React state and sent as bounded context to a stateless endpoint. They disappear on refresh. When a visitor explicitly adds Oskar and consents, the transcript moves into a Pi Durable workspace and a D1 lead points to it. The opaque `/chat/:workspaceId` URL acts as the visitor's private invitation: it restores history and lets the visitor explicitly choose **Message Oskar** or **Ask the agent** for every message.
 
 ## Routes
 
@@ -20,7 +20,7 @@ Anonymous messages are held only in React state and sent as bounded context to a
 |---|---|
 | `/` | Professional portfolio |
 | `/chat` | Ephemeral conversational portfolio |
-| `/chat/:workspaceId` | Consented persistent conversation |
+| `/chat/:workspaceId` | Consented persistent visitor/Oskar/agent workspace |
 | `/blog` and `/blog/:slug` | Local writing |
 | `/admin` | Content agent and lead inbox |
 | `/api/*` | Hono APIs |
@@ -63,7 +63,8 @@ Production admin APIs require the `Cf-Access-Authenticated-User-Email` header. C
 
 - `site_sections` stores flexible, ordered page sections.
 - `blog_posts` stores native and Medium-imported posts.
-- `leads` contains only conversations where a visitor explicitly involved Oskar.
+- `leads` contains only conversations where a visitor explicitly involved Oskar and tracks active/archived workspace state.
+- `workspace_participants` records the visitor, Oskar, and portfolio agent.
 - `content_revisions` records the previous value before agent or API updates.
 
-The owner agent receives content mutation tools only in the fixed private `owner-content` Pi Durable workspace. Public durable workspaces receive read-only portfolio tools.
+The owner agent receives content mutation tools only in the fixed private `owner-content` Pi Durable workspace. Public durable workspaces receive read-only portfolio tools. Direct visitor/Oskar messages are durable transcript entries without model inference; only **Ask the agent** starts a GLM 5.2 turn. Admin can reply as Oskar, copy the invitation URL, archive/restore a workspace, or permanently delete its D1 and Durable Object records.

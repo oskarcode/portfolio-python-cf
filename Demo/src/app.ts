@@ -2,7 +2,10 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { getPost, importMediumFeed, listPosts, savePost } from "./data/blog";
 import { getSection, listSections, saveSection, archiveSection } from "./data/content";
-import { createLead, listLeads, updateLeadStatus } from "./data/leads";
+import {
+  archiveWorkspace, createLead, deleteWorkspaceRecord, listLeads, restoreWorkspace,
+  updateLeadStatus, workspaceParticipants, workspaceRecord,
+} from "./data/leads";
 import { anonymousChat } from "./agent/anonymous";
 import type { BlogPost, ChatMessage, Lead, SiteSection } from "./shared/types";
 
@@ -52,12 +55,13 @@ app.post("/api/handoff", async (c) => {
     return c.json({ error: "A valid name and email are required" }, 400);
   }
   const workspaceId = crypto.randomUUID();
-  const transcript = (input.transcript ?? []).slice(-12).map((m) => `${m.role}: ${m.content.slice(0, 2_000)}`).join("\n");
   const stub = c.env.PORTFOLIO_SESSION.getByName(workspaceId);
-  const imported = await stub.chat(
-    `This visitor explicitly consented to add Oskar. Preserve this prior conversation as context.\n\n${transcript}\n\nVisitor intent: ${input.intent ?? "Talk with Oskar"}. Acknowledge the handoff briefly and offer a useful next step.`,
-    crypto.randomUUID(),
-    false,
+  const imported = await stub.initializeWorkspace(
+    (input.transcript ?? []).filter((message): message is ChatMessage =>
+      (message.role === "user" || message.role === "assistant") && typeof message.content === "string",
+    ),
+    input.name.trim(),
+    input.intent ?? "Talk with Oskar",
   );
   const lead = await createLead(c.env.DB, {
     workspaceId, name: input.name, email: input.email, company: input.company,
@@ -67,17 +71,36 @@ app.post("/api/handoff", async (c) => {
 });
 
 app.get("/api/workspaces/:id", async (c) => {
-  const lead = await c.env.DB.prepare("SELECT id FROM leads WHERE workspace_id = ?").bind(c.req.param("id")).first();
+  const workspaceId = c.req.param("id");
+  const lead = await workspaceRecord(c.env.DB, workspaceId);
   if (!lead) return c.json({ error: "Workspace not found" }, 404);
-  return c.json({ messages: await c.env.PORTFOLIO_SESSION.getByName(c.req.param("id")).history() });
+  if (lead.workspaceStatus === "archived") return c.json({ error: "This workspace has been archived" }, 410);
+  return c.json({
+    workspaceId,
+    status: lead.workspaceStatus,
+    participants: await workspaceParticipants(c.env.DB, workspaceId),
+    messages: await c.env.PORTFOLIO_SESSION.getByName(workspaceId).history(),
+  });
 });
 
-app.post("/api/workspaces/:id/chat", async (c) => {
-  const input = await c.req.json<{ message?: string; requestId?: string }>();
+app.post("/api/workspaces/:id/messages", async (c) => {
+  const input = await c.req.json<{ message?: string; requestId?: string; recipient?: "owner" | "agent" }>();
   if (!input.message?.trim()) return c.json({ error: "message is required" }, 400);
-  const lead = await c.env.DB.prepare("SELECT id FROM leads WHERE workspace_id = ?").bind(c.req.param("id")).first();
+  if (input.recipient !== "owner" && input.recipient !== "agent") return c.json({ error: "recipient must be owner or agent" }, 400);
+  const workspaceId = c.req.param("id");
+  const lead = await workspaceRecord(c.env.DB, workspaceId);
   if (!lead) return c.json({ error: "Workspace not found" }, 404);
-  return c.json(await c.env.PORTFOLIO_SESSION.getByName(c.req.param("id")).chat(input.message, input.requestId ?? crypto.randomUUID(), false));
+  if (lead.workspaceStatus === "archived") return c.json({ error: "This workspace has been archived" }, 410);
+  const stub = c.env.PORTFOLIO_SESSION.getByName(workspaceId);
+  if (input.recipient === "owner") {
+    await stub.sendHumanMessage(input.message, "visitor", lead.name);
+    return c.json({ delivered: true, recipient: "owner" });
+  }
+  return c.json({
+    delivered: true,
+    recipient: "agent",
+    ...await stub.chat(input.message, input.requestId ?? crypto.randomUUID(), false, lead.name),
+  });
 });
 
 app.use("/api/admin/*", requireAdmin);
@@ -103,7 +126,38 @@ app.patch("/api/admin/leads/:id", async (c) => {
   await updateLeadStatus(c.env.DB, c.req.param("id"), input.status);
   return c.json({ ok: true });
 });
-app.get("/api/admin/workspaces/:id", async (c) => c.json({ messages: await c.env.PORTFOLIO_SESSION.getByName(c.req.param("id")).history() }));
+app.get("/api/admin/workspaces/:id", async (c) => {
+  const workspaceId = c.req.param("id");
+  const lead = await workspaceRecord(c.env.DB, workspaceId);
+  if (!lead) return c.json({ error: "Workspace not found" }, 404);
+  return c.json({ workspaceId, status: lead.workspaceStatus, participants: await workspaceParticipants(c.env.DB, workspaceId), messages: await c.env.PORTFOLIO_SESSION.getByName(workspaceId).history() });
+});
+app.post("/api/admin/workspaces/:id/messages", async (c) => {
+  const input = await c.req.json<{ message?: string }>();
+  if (!input.message?.trim()) return c.json({ error: "message is required" }, 400);
+  const workspaceId = c.req.param("id");
+  const lead = await workspaceRecord(c.env.DB, workspaceId);
+  if (!lead) return c.json({ error: "Workspace not found" }, 404);
+  if (lead.workspaceStatus === "archived") return c.json({ error: "Restore the workspace before replying" }, 409);
+  await c.env.PORTFOLIO_SESSION.getByName(workspaceId).sendHumanMessage(input.message, "owner", "Oskar Ablimit");
+  return c.json({ delivered: true });
+});
+app.post("/api/admin/workspaces/:id/archive", async (c) => {
+  await archiveWorkspace(c.env.DB, c.req.param("id"));
+  return c.json({ archived: true });
+});
+app.post("/api/admin/workspaces/:id/restore", async (c) => {
+  await restoreWorkspace(c.env.DB, c.req.param("id"));
+  return c.json({ restored: true });
+});
+app.delete("/api/admin/workspaces/:id", async (c) => {
+  const workspaceId = c.req.param("id");
+  const lead = await workspaceRecord(c.env.DB, workspaceId);
+  if (!lead) return c.json({ error: "Workspace not found" }, 404);
+  await c.env.PORTFOLIO_SESSION.getByName(workspaceId).deleteWorkspace();
+  await deleteWorkspaceRecord(c.env.DB, workspaceId);
+  return c.body(null, 204);
+});
 app.post("/api/admin/agent", async (c) => {
   const input = await c.req.json<{ message?: string; requestId?: string }>();
   if (!input.message?.trim()) return c.json({ error: "message is required" }, 400);

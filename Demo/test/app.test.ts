@@ -14,6 +14,16 @@ describe("API boundaries", () => {
     expect(await response.json()).toEqual({ email: "local-development" });
   });
 
+  it("rejects persistent messages without an explicit recipient", async () => {
+    const response = await app.request("https://portfolio.example.com/api/workspaces/private-id/messages", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message: "hello" }),
+    }, {} as Env);
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ error: "recipient must be owner or agent" });
+  });
+
   it("returns a JSON 404 for unknown API routes", async () => {
     const response = await app.request("https://portfolio.example.com/api/missing", {}, {} as Env);
     expect(response.status).toBe(404);
