@@ -133,14 +133,23 @@ app.get("/api/admin/workspaces/:id", async (c) => {
   return c.json({ workspaceId, status: lead.workspaceStatus, participants: await workspaceParticipants(c.env.DB, workspaceId), messages: await c.env.PORTFOLIO_SESSION.getByName(workspaceId).history() });
 });
 app.post("/api/admin/workspaces/:id/messages", async (c) => {
-  const input = await c.req.json<{ message?: string }>();
+  const input = await c.req.json<{ message?: string; recipient?: "visitor" | "agent"; requestId?: string }>();
   if (!input.message?.trim()) return c.json({ error: "message is required" }, 400);
+  if (input.recipient !== "visitor" && input.recipient !== "agent") return c.json({ error: "recipient must be visitor or agent" }, 400);
   const workspaceId = c.req.param("id");
   const lead = await workspaceRecord(c.env.DB, workspaceId);
   if (!lead) return c.json({ error: "Workspace not found" }, 404);
   if (lead.workspaceStatus === "archived") return c.json({ error: "Restore the workspace before replying" }, 409);
-  await c.env.PORTFOLIO_SESSION.getByName(workspaceId).sendHumanMessage(input.message, "owner", "Oskar Ablimit");
-  return c.json({ delivered: true });
+  const stub = c.env.PORTFOLIO_SESSION.getByName(workspaceId);
+  if (input.recipient === "visitor") {
+    await stub.sendHumanMessage(input.message, "owner", "Oskar Ablimit");
+    return c.json({ delivered: true, recipient: "visitor" });
+  }
+  return c.json({
+    delivered: true,
+    recipient: "agent",
+    ...await stub.chat(input.message, input.requestId ?? crypto.randomUUID(), false, "Oskar Ablimit", "owner"),
+  });
 });
 app.post("/api/admin/workspaces/:id/archive", async (c) => {
   await archiveWorkspace(c.env.DB, c.req.param("id"));

@@ -23,7 +23,10 @@ export const api = {
   adminContent: () => request<{ sections: SiteSection[]; posts: BlogPost[] }>("/api/admin/content"),
   leads: () => request<{ leads: Lead[] }>("/api/admin/leads"),
   workspace: (id: string) => request<WorkspaceSnapshot>(`/api/admin/workspaces/${id}`),
-  ownerReply: (id: string, message: string) => request<{ delivered: boolean }>(`/api/admin/workspaces/${id}/messages`, { method: "POST", body: JSON.stringify({ message }) }),
+  ownerWorkspaceMessage: (id: string, message: string, recipient: "visitor" | "agent") =>
+    request<{ delivered: boolean; recipient: "visitor" | "agent"; answer?: string }>(`/api/admin/workspaces/${id}/messages`, {
+      method: "POST", body: JSON.stringify({ message, recipient, requestId: crypto.randomUUID() }),
+    }),
   archiveWorkspace: (id: string) => request<{ archived: boolean }>(`/api/admin/workspaces/${id}/archive`, { method: "POST" }),
   restoreWorkspace: (id: string) => request<{ restored: boolean }>(`/api/admin/workspaces/${id}/restore`, { method: "POST" }),
   deleteWorkspace: (id: string) => request<void>(`/api/admin/workspaces/${id}`, { method: "DELETE" }),

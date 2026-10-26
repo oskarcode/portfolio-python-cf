@@ -111,7 +111,13 @@ export class PortfolioSession extends DurableObject<Env> {
     return messages;
   }
 
-  async chat(message: string, requestId: string, owner = false, senderName = "Visitor"): Promise<{ answer: string }> {
+  async chat(
+    message: string,
+    requestId: string,
+    owner = false,
+    senderName = "Visitor",
+    sender: "visitor" | "owner" = owner ? "owner" : "visitor",
+  ): Promise<{ answer: string }> {
     const content = message.trim().slice(0, 16_000);
     if (!content) throw new Error("Message is required");
     const conversation = await this.#conversation(owner);
@@ -125,7 +131,7 @@ export class PortfolioSession extends DurableObject<Env> {
       content: modelInput,
       entry: {
         kind: WorkspaceAgentRequestEntry.kind,
-        data: { text: content, sender: owner ? "owner" : "visitor", senderName, audience: "agent", timestamp: Date.now() },
+        data: { text: content, sender, senderName, audience: "agent", timestamp: Date.now() },
       },
       requestId,
     }, BACKGROUND_CONTEXT);
