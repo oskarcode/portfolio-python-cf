@@ -1,0 +1,70 @@
+import { Type } from "@earendil-works/pi-ai";
+import { defineTool } from "@earendil-works/pi-durable";
+import { getSection, listSections, saveSection } from "../data/content";
+import { getPost, listPosts, savePost } from "../data/blog";
+
+const output = (value: unknown) => ({ output: [{ type: "text" as const, text: JSON.stringify(value) }] });
+
+export function createPortfolioTools(db: D1Database, bookingUrl: string) {
+  const readPortfolio = defineTool({
+    name: "read_portfolio",
+    description: "Read all published portfolio sections. Use this before answering questions about Oskar.",
+    parameters: Type.Object({}),
+    replay: "safe",
+    execute: async () => output(await listSections(db)),
+  });
+  const readSection = defineTool({
+    name: "read_section",
+    description: "Read one published portfolio section by slug.",
+    parameters: Type.Object({ slug: Type.String() }),
+    replay: "safe",
+    execute: async ({ slug }) => output(await getSection(db, slug)),
+  });
+  const readBlog = defineTool({
+    name: "read_blog",
+    description: "List published blog posts or read one post by slug.",
+    parameters: Type.Object({ slug: Type.Optional(Type.String()) }),
+    replay: "safe",
+    execute: async ({ slug }) => output(slug ? await getPost(db, slug) : await listPosts(db)),
+  });
+  const booking = defineTool({
+    name: "get_booking_link",
+    description: "Return Oskar's Google Calendar booking link after the visitor indicates a relevant need.",
+    parameters: Type.Object({}),
+    replay: "safe",
+    execute: async () => output({ bookingUrl }),
+  });
+  return [readPortfolio, readSection, readBlog, booking] as const;
+}
+
+export function createOwnerTools(db: D1Database) {
+  const listAll = defineTool({
+    name: "admin_list_content",
+    description: "List all portfolio sections and blog posts, including drafts.",
+    parameters: Type.Object({}), replay: "safe",
+    execute: async () => output({ sections: await listSections(db, true), posts: await listPosts(db, true) }),
+  });
+  const upsertSection = defineTool({
+    name: "admin_save_section",
+    description: "Create or update a portfolio section. This writes immediately and records a revision.",
+    parameters: Type.Object({
+      id: Type.String(), type: Type.String(), title: Type.String(), slug: Type.String(),
+      summary: Type.Union([Type.String(), Type.Null()]), content: Type.Record(Type.String(), Type.Unknown()),
+      sortOrder: Type.Number(), status: Type.Union([Type.Literal("draft"), Type.Literal("published"), Type.Literal("archived")]),
+    }),
+    execute: async (args) => output(await saveSection(db, args, "owner-agent")),
+  });
+  const upsertPost = defineTool({
+    name: "admin_save_blog_post",
+    description: "Create or update a blog post. This writes immediately and records a revision.",
+    parameters: Type.Object({
+      id: Type.String(), slug: Type.String(), title: Type.String(), summary: Type.Union([Type.String(), Type.Null()]),
+      contentMarkdown: Type.String(), coverImageUrl: Type.Union([Type.String(), Type.Null()]),
+      tags: Type.Array(Type.String()), status: Type.Union([Type.Literal("draft"), Type.Literal("review"), Type.Literal("published"), Type.Literal("archived")]),
+      source: Type.Union([Type.Literal("native"), Type.Literal("medium"), Type.Literal("imported")]),
+      sourceUrl: Type.Union([Type.String(), Type.Null()]), publishedAt: Type.Union([Type.String(), Type.Null()]),
+    }),
+    execute: async ({ summary, ...args }) => output(await savePost(db, { ...args, excerpt: summary }, "owner-agent")),
+  });
+  return [listAll, upsertSection, upsertPost] as const;
+}

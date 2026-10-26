@@ -1,0 +1,55 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "portfolio-mission-control",
+  "account_id": "f2b0debf4bd2bf50f7d1a81d1ab88946",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-24",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1,
+    "traces": { "enabled": true }
+  },
+  "assets": {
+    "directory": "./dist/static",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"]
+  },
+  "ai": { "binding": "AI" },
+  "vars": {
+    "AI_GATEWAY_ID": "portfolio",
+    "BOOKING_URL": "https://calendar.google.com/calendar/appointments/schedules/AcZssZ1xHKYdvcfsUs7Oj4wKIW8UOZmpNdOAyNYtDq0vI_WNlV_m_vuKA7QkDmlNYhgmXGHueVxGDPgw?gv=true"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "portfolio-mission-control-db",
+      "database_id": "67febf27-9020-4e28-ba89-cc4cf7c52122"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "MEDIA",
+      "bucket_name": "portfolio-media"
+    }
+  ],
+  "durable_objects": {
+    "bindings": [
+      { "name": "PORTFOLIO_SESSION", "class_name": "PortfolioSession" }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["FlueRegistry", "MissionControl", "AssistantWorkflow", "ContentWorkflow", "ManageWorkflow", "HealthWorkflow"]
+    },
+    { "tag": "v2", "new_sqlite_classes": ["SyncLiveWorkflow"] },
+    {
+      "tag": "v3",
+      "deleted_classes": ["FlueRegistry", "MissionControl", "AssistantWorkflow", "ContentWorkflow", "ManageWorkflow", "SyncLiveWorkflow", "HealthWorkflow"]
+    },
+    { "tag": "v4", "new_sqlite_classes": ["WebMcpChat"] },
+    { "tag": "v5", "new_sqlite_classes": ["PortfolioSession"], "deleted_classes": ["WebMcpChat"] }
+  ]
+}
