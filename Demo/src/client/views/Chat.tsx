@@ -1,3 +1,4 @@
+// Application ownership: Anonymous and durable visitor chat UI, routing, polling, and handoff.
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import type { ChatMessage, WorkspaceMessage } from "../../shared/types";
@@ -18,6 +19,14 @@ const displayWorkspace = (message: WorkspaceMessage): DisplayMessage => ({
   audience: message.audience,
 });
 
+/**
+ * Input:
+ * - The typed parameters shown in the function signature.
+ * Output:
+ * - The declared return value or Promise; thrown errors follow the caller.
+ * What this function does:
+ * - It submits one model turn and persists its result.
+ */
 export function Chat() {
   const initialWorkspace = window.location.pathname.match(/^\/chat\/([^/]+)/)?.[1] ?? null;
   const [messages, setMessages] = useState<DisplayMessage[]>([{

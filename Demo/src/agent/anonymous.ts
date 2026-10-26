@@ -1,3 +1,4 @@
+// Application ownership: Stateless anonymous portfolio chat through Workers AI.
 import { listPosts } from "../data/blog";
 import { listSections, portfolioContext } from "../data/content";
 import type { ChatMessage } from "../shared/types";
@@ -19,6 +20,14 @@ const responseText = (result: unknown): string => {
   return "I couldn't produce a response. Please try again.";
 };
 
+/**
+ * Input:
+ * - The typed parameters shown in the function signature.
+ * Output:
+ * - The declared return value or Promise; thrown errors follow the caller.
+ * What this function does:
+ * - It runs a bounded stateless model conversation.
+ */
 export async function anonymousChat(env: Env, messages: ChatMessage[]): Promise<string> {
   const safeMessages = messages.slice(-12).map((message) => ({ role: message.role, content: message.content.slice(0, 4_000) }));
   const [sections, posts] = await Promise.all([listSections(env.DB), listPosts(env.DB)]);

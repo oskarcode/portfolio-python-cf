@@ -1,3 +1,4 @@
+// Application ownership: Model-callable tool registrations and deterministic permissions.
 import { Type } from "@earendil-works/pi-ai";
 import { defineTool } from "@earendil-works/pi-durable";
 import { getSection, listSections, saveSection } from "../data/content";
@@ -5,6 +6,14 @@ import { getPost, listPosts, savePost } from "../data/blog";
 
 const output = (value: unknown) => ({ output: [{ type: "text" as const, text: JSON.stringify(value) }] });
 
+/**
+ * Input:
+ * - The typed parameters shown in the function signature.
+ * Output:
+ * - The declared return value or Promise; thrown errors follow the caller.
+ * What this function does:
+ * - It constructs and persists a new record.
+ */
 export function createPortfolioTools(db: D1Database, bookingUrl: string) {
   const readPortfolio = defineTool({
     name: "read_portfolio",
@@ -37,6 +46,14 @@ export function createPortfolioTools(db: D1Database, bookingUrl: string) {
   return [readPortfolio, readSection, readBlog, booking] as const;
 }
 
+/**
+ * Input:
+ * - The typed parameters shown in the function signature.
+ * Output:
+ * - The declared return value or Promise; thrown errors follow the caller.
+ * What this function does:
+ * - It constructs and persists a new record.
+ */
 export function createOwnerTools(db: D1Database) {
   const listAll = defineTool({
     name: "admin_list_content",

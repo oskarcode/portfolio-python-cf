@@ -1,9 +1,18 @@
+// Application ownership: Access-protected skill editor, Computer explorer, and command tester.
 import { FormEvent, useEffect, useState } from "react";
 import { api } from "../api";
 import type { ComputerFileEntry, SkillAudience, SkillRecord, SkillSummary } from "../../skills/types";
 
 const blank = (): SkillRecord => ({ slug: "", name: "", description: "", audience: "both", enabled: true, markdown: "# Instructions\n\nDescribe when and how the agent should use this skill.", files: [], updatedAt: "", updatedBy: "" });
 
+/**
+ * Input:
+ * - The typed parameters shown in the function signature.
+ * Output:
+ * - The declared return value or Promise; thrown errors follow the caller.
+ * What this function does:
+ * - It owns the AdminSkills operation for this module.
+ */
 export function AdminSkills() {
   const [skills, setSkills] = useState<SkillSummary[]>([]);
   const [files, setFiles] = useState<ComputerFileEntry[]>([]);

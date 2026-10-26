@@ -1,3 +1,4 @@
+// Application ownership: Pi Durable workspace lifecycle, transcript persistence, tools, and alarms.
 import { DurableObject } from "cloudflare:workers";
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import { createModels } from "@earendil-works/pi-ai/models";
@@ -35,6 +36,14 @@ type WorkspaceMessageData = {
 const WorkspaceMessageEntry = defineEntry<WorkspaceMessageData>("portfolio.workspace-message");
 const WorkspaceAgentRequestEntry = defineEntry<WorkspaceMessageData>("portfolio.agent-request");
 
+/**
+ * Input:
+ * - The typed parameters shown in the function signature.
+ * Output:
+ * - The declared return value or Promise; thrown errors follow the caller.
+ * What this function does:
+ * - It owns the messageText operation for this module.
+ */
 function messageText(value: unknown): string {
   if (typeof value === "string") return value;
   if (!Array.isArray(value)) return "";
@@ -45,6 +54,7 @@ function messageText(value: unknown): string {
   }).join("");
 }
 
+/** PortfolioSession owns this Durable Object lifecycle, its collaborators, and its persisted workspace state. */
 export class PortfolioSession extends DurableObject<Env> {
   #harness!: Harness;
   #ready: Promise<void>;
@@ -52,16 +62,40 @@ export class PortfolioSession extends DurableObject<Env> {
   #alarmUpdate: Promise<void> = Promise.resolve();
   #alarmTaskWatches = new Set<TaskId>();
 
+  /**
+   * Input:
+   * - The typed parameters shown in the function signature.
+   * Output:
+   * - The declared return value or Promise; thrown errors follow the caller.
+   * What this function does:
+   * - It owns the constructor operation for this module.
+   */
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
     this.#workspaceId = ctx.id.name ?? ctx.id.toString();
     this.#ready = ctx.blockConcurrencyWhile(() => this.#initialize());
   }
 
+  /**
+   * Input:
+   * - The typed parameters shown in the function signature.
+   * Output:
+   * - The declared return value or Promise; thrown errors follow the caller.
+   * What this function does:
+   * - It owns the attachedSkillSlugs operation for this module.
+   */
   async #attachedSkillSlugs(): Promise<string[]> {
     return (await workspaceCapabilities(this.env.DB, this.#workspaceId)).skillSlugs;
   }
 
+  /**
+   * Input:
+   * - The typed parameters shown in the function signature.
+   * Output:
+   * - The declared return value or Promise; thrown errors follow the caller.
+   * What this function does:
+   * - It opens required durable resources and runtime registrations.
+   */
   async #initialize(): Promise<void> {
     const storage = await openDurableObjectSqliteStorage(this.ctx.storage);
     const models = createModels();
@@ -97,6 +131,14 @@ export class PortfolioSession extends DurableObject<Env> {
     });
   }
 
+  /**
+   * Input:
+   * - The typed parameters shown in the function signature.
+   * Output:
+   * - The declared return value or Promise; thrown errors follow the caller.
+   * What this function does:
+   * - It owns the conversation operation for this module.
+   */
   async #conversation(owner: boolean): Promise<Conversation> {
     await this.#ready;
     const publicTools = createPortfolioTools(this.env.DB, this.env.BOOKING_URL);
@@ -130,6 +172,14 @@ export class PortfolioSession extends DurableObject<Env> {
     return conversation;
   }
 
+  /**
+   * Input:
+   * - The typed parameters shown in the function signature.
+   * Output:
+   * - The declared return value or Promise; thrown errors follow the caller.
+   * What this function does:
+   * - It projects durable entries into display messages.
+   */
   async #historyFrom(conversation: Conversation): Promise<WorkspaceMessage[]> {
     const page = await conversation.entries({ order: "ascending" }, 300, undefined, BACKGROUND_CONTEXT);
     const messages: WorkspaceMessage[] = [];
@@ -149,6 +199,14 @@ export class PortfolioSession extends DurableObject<Env> {
     return messages;
   }
 
+  /**
+   * Input:
+   * - The typed parameters shown in the function signature.
+   * Output:
+   * - The declared return value or Promise; thrown errors follow the caller.
+   * What this function does:
+   * - It submits one model turn and persists its result.
+   */
   async chat(
     message: string,
     requestId: string,
@@ -179,6 +237,14 @@ export class PortfolioSession extends DurableObject<Env> {
     return { answer: messageText(entry?.model?.[0]?.content) };
   }
 
+  /**
+   * Input:
+   * - The typed parameters shown in the function signature.
+   * Output:
+   * - The declared return value or Promise; thrown errors follow the caller.
+   * What this function does:
+   * - It delivers a message through the selected route.
+   */
   async sendHumanMessage(content: string, sender: "visitor" | "owner", senderName: string): Promise<void> {
     const text = content.trim().slice(0, 16_000);
     if (!text) throw new Error("Message is required");
@@ -194,6 +260,14 @@ export class PortfolioSession extends DurableObject<Env> {
     await submission.wait(BACKGROUND_CONTEXT);
   }
 
+  /**
+   * Input:
+   * - The typed parameters shown in the function signature.
+   * Output:
+   * - The declared return value or Promise; thrown errors follow the caller.
+   * What this function does:
+   * - It opens required durable resources and runtime registrations.
+   */
   async initializeWorkspace(transcript: ChatMessage[], visitorName: string, intent: string): Promise<{ answer: string }> {
     const conversation = await this.#conversation(false);
     for (const message of transcript.slice(-20)) {
@@ -215,10 +289,26 @@ export class PortfolioSession extends DurableObject<Env> {
     return this.chat(`I have added Oskar to this workspace. My goal is: ${intent}. Acknowledge the handoff briefly and explain that I can message Oskar directly or ask you for help.`, crypto.randomUUID(), false, visitorName);
   }
 
+  /**
+   * Input:
+   * - The typed parameters shown in the function signature.
+   * Output:
+   * - The declared return value or Promise; thrown errors follow the caller.
+   * What this function does:
+   * - It projects durable entries into display messages.
+   */
   async history(owner = false): Promise<WorkspaceMessage[]> {
     return this.#historyFrom(await this.#conversation(owner));
   }
 
+  /**
+   * Input:
+   * - The typed parameters shown in the function signature.
+   * Output:
+   * - The declared return value or Promise; thrown errors follow the caller.
+   * What this function does:
+   * - It owns the cancelSchedule operation for this module.
+   */
   async #cancelSchedule(conversationId: ConversationId, scheduleId: string): Promise<number> {
     const { tasks } = await this.#harness.inspect(BACKGROUND_CONTEXT);
     const matches = tasks.filter((task) => matchesSchedule(task, conversationId, scheduleId));
@@ -227,6 +317,14 @@ export class PortfolioSession extends DurableObject<Env> {
     return matches.length;
   }
 
+  /**
+   * Input:
+   * - The typed parameters shown in the function signature.
+   * Output:
+   * - The declared return value or Promise; thrown errors follow the caller.
+   * What this function does:
+   * - It owns the refreshAlarm operation for this module.
+   */
   async #refreshAlarm(): Promise<void> {
     await this.#ready;
     const { tasks } = await this.#harness.inspect(BACKGROUND_CONTEXT);
@@ -244,6 +342,14 @@ export class PortfolioSession extends DurableObject<Env> {
     });
   }
 
+  /**
+   * Input:
+   * - The typed parameters shown in the function signature.
+   * Output:
+   * - The declared return value or Promise; thrown errors follow the caller.
+   * What this function does:
+   * - It owns the setAlarmNoLaterThan operation for this module.
+   */
   #setAlarmNoLaterThan(timestamp: number): Promise<void> {
     const operation = () => this.ctx.storage.transaction(async (transaction) => {
       const current = await transaction.getAlarm();
@@ -254,6 +360,14 @@ export class PortfolioSession extends DurableObject<Env> {
     return update;
   }
 
+  /**
+   * Input:
+   * - The typed parameters shown in the function signature.
+   * Output:
+   * - The declared return value or Promise; thrown errors follow the caller.
+   * What this function does:
+   * - It owns the watchTask operation for this module.
+   */
   #watchTask(taskId: TaskId): void {
     if (this.#alarmTaskWatches.has(taskId)) return;
     this.#alarmTaskWatches.add(taskId);
@@ -263,10 +377,26 @@ export class PortfolioSession extends DurableObject<Env> {
     });
   }
 
+  /**
+   * Input:
+   * - The typed parameters shown in the function signature.
+   * Output:
+   * - The declared return value or Promise; thrown errors follow the caller.
+   * What this function does:
+   * - It owns the alarm operation for this module.
+   */
   override async alarm(): Promise<void> {
     await this.#refreshAlarm();
   }
 
+  /**
+   * Input:
+   * - The typed parameters shown in the function signature.
+   * Output:
+   * - The declared return value or Promise; thrown errors follow the caller.
+   * What this function does:
+   * - It permanently removes the selected state.
+   */
   async deleteWorkspace(): Promise<void> {
     await this.#ready;
     await this.#harness.close(BACKGROUND_CONTEXT);

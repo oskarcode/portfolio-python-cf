@@ -1,3 +1,4 @@
+// Application ownership: Deterministic system instructions for visitor and owner agents.
 export const VISITOR_PROMPT = `You are the conversational guide for Oskar Ablimit's professional portfolio.
 
 Voice:

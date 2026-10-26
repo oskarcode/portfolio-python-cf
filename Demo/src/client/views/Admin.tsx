@@ -1,3 +1,4 @@
+// Application ownership: Unified Access-protected workspace chat and capability management UI.
 import { FormEvent, useEffect, useState } from "react";
 import { api } from "../api";
 import type { AdminWorkspaceSummary, WorkspaceCapabilities, WorkspaceMessage } from "../../shared/types";
@@ -7,6 +8,14 @@ import { ChatResponse } from "../components/ChatResponse";
 
 const emptyCapabilities: WorkspaceCapabilities = { webSearch: false, scheduling: false, skillSlugs: [] };
 
+/**
+ * Input:
+ * - The typed parameters shown in the function signature.
+ * Output:
+ * - The declared return value or Promise; thrown errors follow the caller.
+ * What this function does:
+ * - It owns the Admin operation for this module.
+ */
 export function Admin() {
   const skillsPage = window.location.pathname === "/admin/skills";
   const [workspaces, setWorkspaces] = useState<AdminWorkspaceSummary[]>([]);

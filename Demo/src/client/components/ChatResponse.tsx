@@ -1,7 +1,16 @@
+// Application ownership: Safe lightweight Markdown-like rendering and contextual chat actions.
 import { Fragment, type ReactNode } from "react";
 
 type Action = { label: string; href?: string; prompt?: string };
 
+/**
+ * Input:
+ * - The typed parameters shown in the function signature.
+ * Output:
+ * - The declared return value or Promise; thrown errors follow the caller.
+ * What this function does:
+ * - It parses safe inline response formatting.
+ */
 function inline(text: string): ReactNode[] {
   const pattern = /(\[([^\]]+)\]\(((?:https?:\/\/|\/)[^)]+)\)|\*\*([^*]+)\*\*|`([^`]+)`|(https?:\/\/[^\s,)]+))/g;
   const nodes: ReactNode[] = [];
@@ -19,6 +28,14 @@ function inline(text: string): ReactNode[] {
   return nodes;
 }
 
+/**
+ * Input:
+ * - The typed parameters shown in the function signature.
+ * Output:
+ * - The declared return value or Promise; thrown errors follow the caller.
+ * What this function does:
+ * - It submits one model turn and persists its result.
+ */
 export function ChatResponse({ content }: { content: string }) {
   const lines = content.trim().split("\n");
   const blocks: ReactNode[] = [];
@@ -56,6 +73,14 @@ export function ChatResponse({ content }: { content: string }) {
   return <div className="response-content">{blocks.map((block, index) => <Fragment key={index}>{block}</Fragment>)}</div>;
 }
 
+/**
+ * Input:
+ * - The typed parameters shown in the function signature.
+ * Output:
+ * - The declared return value or Promise; thrown errors follow the caller.
+ * What this function does:
+ * - It derives presentation behavior from agent response content.
+ */
 export function responseActions(content: string, persistent: boolean): Action[] {
   const text = content.toLowerCase();
   const actions: Action[] = [];

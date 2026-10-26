@@ -1,3 +1,4 @@
+// Application ownership: Browser bootstrap that mounts React into the static HTML shell.
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";

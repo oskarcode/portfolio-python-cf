@@ -1,3 +1,4 @@
+// Application ownership: D1 lead, participant, and visitor-workspace lifecycle operations.
 import type { Lead, WorkspaceParticipant } from "../shared/types";
 
 interface LeadRow {
@@ -14,6 +15,14 @@ const toLead = (row: LeadRow): Lead => ({
   createdAt: row.created_at, updatedAt: row.updated_at,
 });
 
+/**
+ * Input:
+ * - The typed parameters shown in the function signature.
+ * Output:
+ * - The declared return value or Promise; thrown errors follow the caller.
+ * What this function does:
+ * - It constructs and persists a new record.
+ */
 export async function createLead(db: D1Database, input: {
   workspaceId: string; name: string; email: string; company?: string; intent: string;
   summary?: string; assessment?: Record<string, unknown>;
@@ -40,37 +49,93 @@ export async function createLead(db: D1Database, input: {
   return lead;
 }
 
+/**
+ * Input:
+ * - The typed parameters shown in the function signature.
+ * Output:
+ * - The declared return value or Promise; thrown errors follow the caller.
+ * What this function does:
+ * - It reads and returns an ordered collection.
+ */
 export async function listLeads(db: D1Database): Promise<Lead[]> {
   const result = await db.prepare("SELECT * FROM leads ORDER BY updated_at DESC").all<LeadRow>();
   return result.results.map(toLead);
 }
 
+/**
+ * Input:
+ * - The typed parameters shown in the function signature.
+ * Output:
+ * - The declared return value or Promise; thrown errors follow the caller.
+ * What this function does:
+ * - It validates and changes existing state.
+ */
 export async function updateLeadStatus(db: D1Database, id: string, status: Lead["status"]): Promise<void> {
   await db.prepare("UPDATE leads SET status = ?, updated_at = ? WHERE id = ?")
     .bind(status, new Date().toISOString(), id).run();
 }
 
+/**
+ * Input:
+ * - The typed parameters shown in the function signature.
+ * Output:
+ * - The declared return value or Promise; thrown errors follow the caller.
+ * What this function does:
+ * - It owns the workspaceRecord operation for this module.
+ */
 export async function workspaceRecord(db: D1Database, workspaceId: string): Promise<Lead | null> {
   const row = await db.prepare("SELECT * FROM leads WHERE workspace_id = ?").bind(workspaceId).first<LeadRow>();
   return row ? toLead(row) : null;
 }
 
+/**
+ * Input:
+ * - The typed parameters shown in the function signature.
+ * Output:
+ * - The declared return value or Promise; thrown errors follow the caller.
+ * What this function does:
+ * - It owns the workspaceParticipants operation for this module.
+ */
 export async function workspaceParticipants(db: D1Database, workspaceId: string): Promise<WorkspaceParticipant[]> {
   const result = await db.prepare("SELECT participant_type, name, email FROM workspace_participants WHERE workspace_id = ? ORDER BY CASE participant_type WHEN 'visitor' THEN 1 WHEN 'owner' THEN 2 ELSE 3 END")
     .bind(workspaceId).all<{ participant_type: WorkspaceParticipant["type"]; name: string; email: string | null }>();
   return result.results.map((row) => ({ type: row.participant_type, name: row.name, email: row.email }));
 }
 
+/**
+ * Input:
+ * - The typed parameters shown in the function signature.
+ * Output:
+ * - The declared return value or Promise; thrown errors follow the caller.
+ * What this function does:
+ * - It marks the selected state as archived.
+ */
 export async function archiveWorkspace(db: D1Database, workspaceId: string): Promise<void> {
   await db.prepare("UPDATE leads SET workspace_status = 'archived', updated_at = ? WHERE workspace_id = ?")
     .bind(new Date().toISOString(), workspaceId).run();
 }
 
+/**
+ * Input:
+ * - The typed parameters shown in the function signature.
+ * Output:
+ * - The declared return value or Promise; thrown errors follow the caller.
+ * What this function does:
+ * - It returns archived state to active use.
+ */
 export async function restoreWorkspace(db: D1Database, workspaceId: string): Promise<void> {
   await db.prepare("UPDATE leads SET workspace_status = 'active', updated_at = ? WHERE workspace_id = ?")
     .bind(new Date().toISOString(), workspaceId).run();
 }
 
+/**
+ * Input:
+ * - The typed parameters shown in the function signature.
+ * Output:
+ * - The declared return value or Promise; thrown errors follow the caller.
+ * What this function does:
+ * - It permanently removes the selected state.
+ */
 export async function deleteWorkspaceRecord(db: D1Database, workspaceId: string): Promise<void> {
   await db.batch([
     db.prepare("DELETE FROM workspace_participants WHERE workspace_id = ?").bind(workspaceId),

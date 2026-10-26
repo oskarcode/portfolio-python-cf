@@ -1,6 +1,15 @@
+// Application ownership: Typed browser HTTP client for public and Access-protected APIs.
 import type { AdminWorkspaceSummary, BlogPost, ChatMessage, Lead, SiteSection, WorkspaceCapabilities, WorkspaceSnapshot } from "../shared/types";
 import type { ComputerFileEntry, SaveSkillInput, SkillRecord, SkillSummary } from "../skills/types";
 
+/**
+ * Input:
+ * - The typed parameters shown in the function signature.
+ * Output:
+ * - The declared return value or Promise; thrown errors follow the caller.
+ * What this function does:
+ * - It owns the request operation for this module.
+ */
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, { ...init, headers: { "Content-Type": "application/json", ...init?.headers } });
   if (response.status === 204) return undefined as T;

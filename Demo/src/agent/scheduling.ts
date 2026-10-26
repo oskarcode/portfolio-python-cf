@@ -1,3 +1,4 @@
+// Application ownership: Replay-safe Pi Durable scheduling tools and delivery tasks.
 import { Type } from "@earendil-works/pi-ai";
 import { type ConversationId, defineDoc, defineTask, type TaskInspection, type ToolRegistration } from "@earendil-works/pi-durable";
 
@@ -27,6 +28,14 @@ export const DeliverScheduledInstruction = defineTask<ScheduledInstruction, Deli
   },
 });
 
+/**
+ * Input:
+ * - The typed parameters shown in the function signature.
+ * Output:
+ * - The declared return value or Promise; thrown errors follow the caller.
+ * What this function does:
+ * - It inspects persisted task timing state.
+ */
 export function scheduledDeadline(task: TaskInspection): number | undefined {
   if (task.record.kind !== DeliverScheduledInstruction.definition.name || task.record.state.status === "terminal" || task.record.state.status === "completing") return undefined;
   const input = task.record.input as Partial<ScheduledInstruction>;
@@ -34,11 +43,27 @@ export function scheduledDeadline(task: TaskInspection): number | undefined {
   return checkpoint.phase === "wait" && Number.isSafeInteger(input.runAt) ? input.runAt : undefined;
 }
 
+/**
+ * Input:
+ * - The typed parameters shown in the function signature.
+ * Output:
+ * - The declared return value or Promise; thrown errors follow the caller.
+ * What this function does:
+ * - It checks whether a value belongs to the requested scope.
+ */
 export function matchesSchedule(task: TaskInspection, conversationId: ConversationId, scheduleId: string): boolean {
   const input = task.record.input as Partial<ScheduledInstruction>;
   return task.record.kind === DeliverScheduledInstruction.definition.name && input.conversationId === conversationId && input.id === scheduleId;
 }
 
+/**
+ * Input:
+ * - The typed parameters shown in the function signature.
+ * Output:
+ * - The declared return value or Promise; thrown errors follow the caller.
+ * What this function does:
+ * - It constructs and persists a new record.
+ */
 export function createScheduleTools(ensureWakeupAt: (timestamp: number) => Promise<void>, cancel: (conversationId: ConversationId, scheduleId: string) => Promise<number>): ToolRegistration[] {
   return [
     {

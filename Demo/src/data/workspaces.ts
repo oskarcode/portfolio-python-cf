@@ -1,5 +1,14 @@
+// Application ownership: D1 admin workspace catalog and workspace-local capability attachments.
 import type { AdminWorkspaceSummary, WorkspaceCapabilities } from "../shared/types";
 
+/**
+ * Input:
+ * - The typed parameters shown in the function signature.
+ * Output:
+ * - The declared return value or Promise; thrown errors follow the caller.
+ * What this function does:
+ * - It reads and returns an ordered collection.
+ */
 export async function listAdminWorkspaces(db: D1Database): Promise<AdminWorkspaceSummary[]> {
   const [managed, visitors] = await Promise.all([
     db.prepare("SELECT id, title, purpose, status, updated_at FROM admin_workspaces ORDER BY updated_at DESC").all<{ id: string; title: string; purpose: string; status: "active" | "archived"; updated_at: string }>(),
@@ -11,6 +20,14 @@ export async function listAdminWorkspaces(db: D1Database): Promise<AdminWorkspac
   ];
 }
 
+/**
+ * Input:
+ * - The typed parameters shown in the function signature.
+ * Output:
+ * - The declared return value or Promise; thrown errors follow the caller.
+ * What this function does:
+ * - It constructs and persists a new record.
+ */
 export async function createAdminWorkspace(db: D1Database, input: { title: string; purpose: string }): Promise<AdminWorkspaceSummary> {
   const id = `admin-${crypto.randomUUID()}`;
   const title = input.title.trim().slice(0, 120);
@@ -20,10 +37,26 @@ export async function createAdminWorkspace(db: D1Database, input: { title: strin
   return { id, title, purpose, kind: "managed", status: "active", updatedAt: new Date().toISOString() };
 }
 
+/**
+ * Input:
+ * - The typed parameters shown in the function signature.
+ * Output:
+ * - The declared return value or Promise; thrown errors follow the caller.
+ * What this function does:
+ * - It owns the managedWorkspace operation for this module.
+ */
 export async function managedWorkspace(db: D1Database, id: string): Promise<{ id: string; title: string; purpose: string; status: "active" | "archived" } | null> {
   return db.prepare("SELECT id, title, purpose, status FROM admin_workspaces WHERE id = ?").bind(id).first();
 }
 
+/**
+ * Input:
+ * - The typed parameters shown in the function signature.
+ * Output:
+ * - The declared return value or Promise; thrown errors follow the caller.
+ * What this function does:
+ * - It owns the workspaceCapabilities operation for this module.
+ */
 export async function workspaceCapabilities(db: D1Database, workspaceId: string): Promise<WorkspaceCapabilities> {
   const rows = await db.prepare("SELECT capability FROM workspace_capabilities WHERE workspace_id = ? AND enabled = 1").bind(workspaceId).all<{ capability: string }>();
   const values = new Set(rows.results.map((row) => row.capability));
@@ -34,6 +67,14 @@ export async function workspaceCapabilities(db: D1Database, workspaceId: string)
   };
 }
 
+/**
+ * Input:
+ * - The typed parameters shown in the function signature.
+ * Output:
+ * - The declared return value or Promise; thrown errors follow the caller.
+ * What this function does:
+ * - It validates and persists the requested state.
+ */
 export async function saveWorkspaceCapabilities(db: D1Database, workspaceId: string, capabilities: WorkspaceCapabilities): Promise<WorkspaceCapabilities> {
   const values = [
     ...(capabilities.webSearch ? ["web-search"] : []),

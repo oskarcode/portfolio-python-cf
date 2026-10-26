@@ -1,5 +1,14 @@
+// Application ownership: Shared public navigation and footer shell.
 import type { ReactNode } from "react";
 
+/**
+ * Input:
+ * - The typed parameters shown in the function signature.
+ * Output:
+ * - The declared return value or Promise; thrown errors follow the caller.
+ * What this function does:
+ * - It owns the Layout operation for this module.
+ */
 export function Layout({ children }: { children: ReactNode }) {
   const path = window.location.pathname;
   return <>

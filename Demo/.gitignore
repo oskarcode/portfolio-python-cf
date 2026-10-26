@@ -1,0 +1,4 @@
+# Local learning handoff artifacts contain machine-specific guide metadata.
+docs/*-learning-guide.html
+docs/learning-agent/
+docs/diagrams/

@@ -1,3 +1,4 @@
+// Application ownership: Compile-time contracts shared by the surrounding feature.
 export type SkillAudience = "visitor" | "content" | "both";
 
 export type SkillSummary = {

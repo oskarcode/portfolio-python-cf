@@ -1,3 +1,4 @@
+// Application ownership: Cloudflare web search and page-fetch adapters for Pi Durable.
 import type { ToolRegistration } from "@earendil-works/pi-durable";
 import { webFetchTool } from "agents/webfetch/pi";
 import { webSearchTool } from "agents/websearch/pi";
@@ -13,6 +14,14 @@ const currentPiOutput = (tool: ToolRegistration): ToolRegistration => ({
   },
 });
 
+/**
+ * Input:
+ * - The typed parameters shown in the function signature.
+ * Output:
+ * - The declared return value or Promise; thrown errors follow the caller.
+ * What this function does:
+ * - It constructs and persists a new record.
+ */
 export function createWebTools(env: Pick<Env, "AI" | "AI_GATEWAY_ID">): ToolRegistration[] {
   return [
     currentPiOutput(webSearchTool({ binding: env.AI, gateway: env.AI_GATEWAY_ID, provider: "exa", limit: 8, timeoutMs: 30_000, maxDescriptionChars: 800 })),

@@ -1,3 +1,4 @@
+// Application ownership: D1 blog persistence plus bounded Medium RSS import.
 import type { BlogPost } from "../shared/types";
 
 interface BlogRow {
@@ -18,18 +19,42 @@ const toPost = (row: BlogRow): BlogPost => ({
   sourceUrl: row.source_url, publishedAt: row.published_at, updatedAt: row.updated_at,
 });
 
+/**
+ * Input:
+ * - The typed parameters shown in the function signature.
+ * Output:
+ * - The declared return value or Promise; thrown errors follow the caller.
+ * What this function does:
+ * - It reads and returns an ordered collection.
+ */
 export async function listPosts(db: D1Database, includeDrafts = false): Promise<BlogPost[]> {
   const where = includeDrafts ? "status != 'archived'" : "status = 'published'";
   const result = await db.prepare(`SELECT * FROM blog_posts WHERE ${where} ORDER BY COALESCE(published_at, updated_at) DESC`).all<BlogRow>();
   return result.results.map(toPost);
 }
 
+/**
+ * Input:
+ * - The typed parameters shown in the function signature.
+ * Output:
+ * - The declared return value or Promise; thrown errors follow the caller.
+ * What this function does:
+ * - It reads one matching record.
+ */
 export async function getPost(db: D1Database, slug: string, includeDrafts = false): Promise<BlogPost | null> {
   const where = includeDrafts ? "status != 'archived'" : "status = 'published'";
   const row = await db.prepare(`SELECT * FROM blog_posts WHERE slug = ? AND ${where}`).bind(slug).first<BlogRow>();
   return row ? toPost(row) : null;
 }
 
+/**
+ * Input:
+ * - The typed parameters shown in the function signature.
+ * Output:
+ * - The declared return value or Promise; thrown errors follow the caller.
+ * What this function does:
+ * - It validates and persists the requested state.
+ */
 export async function savePost(db: D1Database, input: Omit<BlogPost, "updatedAt">, actor: string): Promise<BlogPost> {
   const existing = await db.prepare("SELECT * FROM blog_posts WHERE id = ?").bind(input.id).first<BlogRow>();
   const now = new Date().toISOString();
@@ -53,6 +78,14 @@ export async function savePost(db: D1Database, input: Omit<BlogPost, "updatedAt"
 const text = (value: string): string => value.replace(/<!\[CDATA\[|\]\]>/g, "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
 const slugify = (value: string): string => value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 90);
 
+/**
+ * Input:
+ * - The typed parameters shown in the function signature.
+ * Output:
+ * - The declared return value or Promise; thrown errors follow the caller.
+ * What this function does:
+ * - It retrieves external data and stores safe local records.
+ */
 export async function importMediumFeed(db: D1Database, actor: string): Promise<{ imported: number; skipped: number }> {
   const response = await fetch("https://medium.com/feed/@rnwqyzxnn", { headers: { "User-Agent": "OskarPortfolioImporter/1.0" } });
   if (!response.ok) throw new Error(`Medium returned ${response.status}`);

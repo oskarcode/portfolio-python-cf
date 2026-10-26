@@ -1,3 +1,4 @@
+// Application ownership: Model-callable tool registrations and deterministic permissions.
 import { Type } from "@earendil-works/pi-ai";
 import type { ToolRegistration } from "@earendil-works/pi-durable";
 import type { SaveSkillInput, SkillRecord, SkillSummary } from "./types";

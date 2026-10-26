@@ -1,3 +1,4 @@
+// Application ownership: Compile-time contracts shared by the surrounding feature.
 export type SectionStatus = "draft" | "published" | "archived";
 
 export interface SiteSection {

@@ -1,3 +1,4 @@
+// Application ownership: Hono route composition and security boundaries for every Worker API.
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { getPost, importMediumFeed, listPosts, savePost } from "./data/blog";
@@ -22,22 +23,70 @@ const requireAdmin = async (c: { req: { raw: Request }; json: (body: unknown, st
   await next();
 };
 
+/**
+ * Input:
+ * - GET /api/health with path, query, or JSON values defined in the handler.
+ * Output:
+ * - A JSON response or empty success response with an explicit HTTP status.
+ * What this function does:
+ * - It enforces the route boundary, calls the owning service, and maps failures through Hono.
+ */
 app.get("/api/health", async (c) => {
   const row = await c.env.DB.prepare("SELECT 1 AS ok").first<{ ok: number }>();
   return c.json({ ok: row?.ok === 1, services: { d1: "ok", ai: "configured", durableObjects: "configured" } });
 });
 
+/**
+ * Input:
+ * - GET /api/content with path, query, or JSON values defined in the handler.
+ * Output:
+ * - A JSON response or empty success response with an explicit HTTP status.
+ * What this function does:
+ * - It enforces the route boundary, calls the owning service, and maps failures through Hono.
+ */
 app.get("/api/content", async (c) => c.json({ sections: await listSections(c.env.DB) }));
+/**
+ * Input:
+ * - GET /api/content/:slug with path, query, or JSON values defined in the handler.
+ * Output:
+ * - A JSON response or empty success response with an explicit HTTP status.
+ * What this function does:
+ * - It enforces the route boundary, calls the owning service, and maps failures through Hono.
+ */
 app.get("/api/content/:slug", async (c) => {
   const section = await getSection(c.env.DB, c.req.param("slug"));
   return section ? c.json(section) : c.json({ error: "Not found" }, 404);
 });
+/**
+ * Input:
+ * - GET /api/blog with path, query, or JSON values defined in the handler.
+ * Output:
+ * - A JSON response or empty success response with an explicit HTTP status.
+ * What this function does:
+ * - It enforces the route boundary, calls the owning service, and maps failures through Hono.
+ */
 app.get("/api/blog", async (c) => c.json({ posts: await listPosts(c.env.DB) }));
+/**
+ * Input:
+ * - GET /api/blog/:slug with path, query, or JSON values defined in the handler.
+ * Output:
+ * - A JSON response or empty success response with an explicit HTTP status.
+ * What this function does:
+ * - It enforces the route boundary, calls the owning service, and maps failures through Hono.
+ */
 app.get("/api/blog/:slug", async (c) => {
   const post = await getPost(c.env.DB, c.req.param("slug"));
   return post ? c.json(post) : c.json({ error: "Not found" }, 404);
 });
 
+/**
+ * Input:
+ * - POST /api/chat with path, query, or JSON values defined in the handler.
+ * Output:
+ * - A JSON response or empty success response with an explicit HTTP status.
+ * What this function does:
+ * - It enforces the route boundary, calls the owning service, and maps failures through Hono.
+ */
 app.post("/api/chat", async (c) => {
   const input = await c.req.json<{ messages?: ChatMessage[] }>();
   if (!Array.isArray(input.messages) || input.messages.length === 0) return c.json({ error: "messages are required" }, 400);
@@ -48,6 +97,14 @@ app.post("/api/chat", async (c) => {
   return c.json({ answer: await anonymousChat(c.env, messages) });
 });
 
+/**
+ * Input:
+ * - POST /api/handoff with path, query, or JSON values defined in the handler.
+ * Output:
+ * - A JSON response or empty success response with an explicit HTTP status.
+ * What this function does:
+ * - It enforces the route boundary, calls the owning service, and maps failures through Hono.
+ */
 app.post("/api/handoff", async (c) => {
   const input = await c.req.json<{
     name?: string; email?: string; company?: string; intent?: string; summary?: string;
@@ -73,6 +130,14 @@ app.post("/api/handoff", async (c) => {
   return c.json({ workspaceId, leadId: lead.id, answer: imported.answer }, 201);
 });
 
+/**
+ * Input:
+ * - GET /api/workspaces/:id with path, query, or JSON values defined in the handler.
+ * Output:
+ * - A JSON response or empty success response with an explicit HTTP status.
+ * What this function does:
+ * - It enforces the route boundary, calls the owning service, and maps failures through Hono.
+ */
 app.get("/api/workspaces/:id", async (c) => {
   const workspaceId = c.req.param("id");
   const lead = await workspaceRecord(c.env.DB, workspaceId);
@@ -86,6 +151,14 @@ app.get("/api/workspaces/:id", async (c) => {
   });
 });
 
+/**
+ * Input:
+ * - POST /api/workspaces/:id/messages with path, query, or JSON values defined in the handler.
+ * Output:
+ * - A JSON response or empty success response with an explicit HTTP status.
+ * What this function does:
+ * - It enforces the route boundary, calls the owning service, and maps failures through Hono.
+ */
 app.post("/api/workspaces/:id/messages", async (c) => {
   const input = await c.req.json<{ message?: string; requestId?: string; recipient?: "owner" | "agent" }>();
   if (!input.message?.trim()) return c.json({ error: "message is required" }, 400);
@@ -107,62 +180,230 @@ app.post("/api/workspaces/:id/messages", async (c) => {
 });
 
 app.use("/api/admin/*", requireAdmin);
+/**
+ * Input:
+ * - GET /api/admin/me with path, query, or JSON values defined in the handler.
+ * Output:
+ * - A JSON response or empty success response with an explicit HTTP status.
+ * What this function does:
+ * - It enforces the route boundary, calls the owning service, and maps failures through Hono.
+ */
 app.get("/api/admin/me", (c) => c.json({ email: adminEmail(c.req.raw) ?? "local-development" }));
+/**
+ * Input:
+ * - GET /api/admin/skills with path, query, or JSON values defined in the handler.
+ * Output:
+ * - A JSON response or empty success response with an explicit HTTP status.
+ * What this function does:
+ * - It enforces the route boundary, calls the owning service, and maps failures through Hono.
+ */
 app.get("/api/admin/skills", async (c) => c.json({ skills: await c.env.SKILL_HUB.getByName("global").listSkills() }));
+/**
+ * Input:
+ * - GET /api/admin/skills/:slug with path, query, or JSON values defined in the handler.
+ * Output:
+ * - A JSON response or empty success response with an explicit HTTP status.
+ * What this function does:
+ * - It enforces the route boundary, calls the owning service, and maps failures through Hono.
+ */
 app.get("/api/admin/skills/:slug", async (c) => {
   const skill = await c.env.SKILL_HUB.getByName("global").getSkill(c.req.param("slug"));
   return skill ? c.json(skill) : c.json({ error: "Skill not found" }, 404);
 });
+/**
+ * Input:
+ * - POST /api/admin/skills with path, query, or JSON values defined in the handler.
+ * Output:
+ * - A JSON response or empty success response with an explicit HTTP status.
+ * What this function does:
+ * - It enforces the route boundary, calls the owning service, and maps failures through Hono.
+ */
 app.post("/api/admin/skills", async (c) => {
   const input = await c.req.json<SaveSkillInput>();
   return c.json(await c.env.SKILL_HUB.getByName("global").saveSkill({ ...input, updatedBy: adminEmail(c.req.raw) ?? "local-development" }), 201);
 });
+/**
+ * Input:
+ * - PUT /api/admin/skills/:slug with path, query, or JSON values defined in the handler.
+ * Output:
+ * - A JSON response or empty success response with an explicit HTTP status.
+ * What this function does:
+ * - It enforces the route boundary, calls the owning service, and maps failures through Hono.
+ */
 app.put("/api/admin/skills/:slug", async (c) => {
   const input = await c.req.json<Omit<SaveSkillInput, "slug">>();
   return c.json(await c.env.SKILL_HUB.getByName("global").saveSkill({ ...input, slug: c.req.param("slug"), updatedBy: adminEmail(c.req.raw) ?? "local-development" }));
 });
+/**
+ * Input:
+ * - DELETE /api/admin/skills/:slug with path, query, or JSON values defined in the handler.
+ * Output:
+ * - A JSON response or empty success response with an explicit HTTP status.
+ * What this function does:
+ * - It enforces the route boundary, calls the owning service, and maps failures through Hono.
+ */
 app.delete("/api/admin/skills/:slug", async (c) => {
   const deleted = await c.env.SKILL_HUB.getByName("global").deleteSkill(c.req.param("slug"));
   return deleted ? c.json({ deleted: true }) : c.json({ error: "Skill not found" }, 404);
 });
+/**
+ * Input:
+ * - POST /api/admin/skills/:slug/command with path, query, or JSON values defined in the handler.
+ * Output:
+ * - A JSON response or empty success response with an explicit HTTP status.
+ * What this function does:
+ * - It enforces the route boundary, calls the owning service, and maps failures through Hono.
+ */
 app.post("/api/admin/skills/:slug/command", async (c) => {
   const input = await c.req.json<{ command?: string }>();
   if (!input.command?.trim()) return c.json({ error: "command is required" }, 400);
   return c.json(await c.env.SKILL_HUB.getByName("global").runSkillCommand(c.req.param("slug"), input.command, "content"));
 });
+/**
+ * Input:
+ * - GET /api/admin/computer with path, query, or JSON values defined in the handler.
+ * Output:
+ * - A JSON response or empty success response with an explicit HTTP status.
+ * What this function does:
+ * - It enforces the route boundary, calls the owning service, and maps failures through Hono.
+ */
 app.get("/api/admin/computer", async (c) => c.json({ root: "/workspace/skills", entries: await c.env.SKILL_HUB.getByName("global").listComputerFiles() }));
+/**
+ * Input:
+ * - GET /api/admin/computer/file with path, query, or JSON values defined in the handler.
+ * Output:
+ * - A JSON response or empty success response with an explicit HTTP status.
+ * What this function does:
+ * - It enforces the route boundary, calls the owning service, and maps failures through Hono.
+ */
 app.get("/api/admin/computer/file", async (c) => {
   const path = c.req.query("path");
   return path ? c.json(await c.env.SKILL_HUB.getByName("global").readComputerFile(path)) : c.json({ error: "path is required" }, 400);
 });
+/**
+ * Input:
+ * - GET /api/admin/content with path, query, or JSON values defined in the handler.
+ * Output:
+ * - A JSON response or empty success response with an explicit HTTP status.
+ * What this function does:
+ * - It enforces the route boundary, calls the owning service, and maps failures through Hono.
+ */
 app.get("/api/admin/content", async (c) => c.json({ sections: await listSections(c.env.DB, true), posts: await listPosts(c.env.DB, true) }));
+/**
+ * Input:
+ * - PUT /api/admin/sections/:id with path, query, or JSON values defined in the handler.
+ * Output:
+ * - A JSON response or empty success response with an explicit HTTP status.
+ * What this function does:
+ * - It enforces the route boundary, calls the owning service, and maps failures through Hono.
+ */
 app.put("/api/admin/sections/:id", async (c) => {
   const input = await c.req.json<Omit<SiteSection, "id" | "updatedAt">>();
   return c.json(await saveSection(c.env.DB, { ...input, id: c.req.param("id") }, adminEmail(c.req.raw) ?? "local"));
 });
+/**
+ * Input:
+ * - DELETE /api/admin/sections/:id with path, query, or JSON values defined in the handler.
+ * Output:
+ * - A JSON response or empty success response with an explicit HTTP status.
+ * What this function does:
+ * - It enforces the route boundary, calls the owning service, and maps failures through Hono.
+ */
 app.delete("/api/admin/sections/:id", async (c) => {
   await archiveSection(c.env.DB, c.req.param("id"), adminEmail(c.req.raw) ?? "local");
   return c.body(null, 204);
 });
+/**
+ * Input:
+ * - PUT /api/admin/blog/:id with path, query, or JSON values defined in the handler.
+ * Output:
+ * - A JSON response or empty success response with an explicit HTTP status.
+ * What this function does:
+ * - It enforces the route boundary, calls the owning service, and maps failures through Hono.
+ */
 app.put("/api/admin/blog/:id", async (c) => {
   const input = await c.req.json<Omit<BlogPost, "id" | "updatedAt">>();
   return c.json(await savePost(c.env.DB, { ...input, id: c.req.param("id") }, adminEmail(c.req.raw) ?? "local"));
 });
+/**
+ * Input:
+ * - POST /api/admin/blog/import-medium with path, query, or JSON values defined in the handler.
+ * Output:
+ * - A JSON response or empty success response with an explicit HTTP status.
+ * What this function does:
+ * - It enforces the route boundary, calls the owning service, and maps failures through Hono.
+ */
 app.post("/api/admin/blog/import-medium", async (c) => c.json(await importMediumFeed(c.env.DB, adminEmail(c.req.raw) ?? "local")));
+/**
+ * Input:
+ * - GET /api/admin/leads with path, query, or JSON values defined in the handler.
+ * Output:
+ * - A JSON response or empty success response with an explicit HTTP status.
+ * What this function does:
+ * - It enforces the route boundary, calls the owning service, and maps failures through Hono.
+ */
 app.get("/api/admin/leads", async (c) => c.json({ leads: await listLeads(c.env.DB) }));
+/**
+ * Input:
+ * - GET /api/admin/workspaces with path, query, or JSON values defined in the handler.
+ * Output:
+ * - A JSON response or empty success response with an explicit HTTP status.
+ * What this function does:
+ * - It enforces the route boundary, calls the owning service, and maps failures through Hono.
+ */
 app.get("/api/admin/workspaces", async (c) => c.json({ workspaces: await listAdminWorkspaces(c.env.DB) }));
+/**
+ * Input:
+ * - POST /api/admin/workspaces with path, query, or JSON values defined in the handler.
+ * Output:
+ * - A JSON response or empty success response with an explicit HTTP status.
+ * What this function does:
+ * - It enforces the route boundary, calls the owning service, and maps failures through Hono.
+ */
 app.post("/api/admin/workspaces", async (c) => c.json(await createAdminWorkspace(c.env.DB, await c.req.json<{ title: string; purpose: string }>()), 201));
+/**
+ * Input:
+ * - GET /api/admin/workspaces/:id/capabilities with path, query, or JSON values defined in the handler.
+ * Output:
+ * - A JSON response or empty success response with an explicit HTTP status.
+ * What this function does:
+ * - It enforces the route boundary, calls the owning service, and maps failures through Hono.
+ */
 app.get("/api/admin/workspaces/:id/capabilities", async (c) => c.json(await workspaceCapabilities(c.env.DB, c.req.param("id"))));
+/**
+ * Input:
+ * - PUT /api/admin/workspaces/:id/capabilities with path, query, or JSON values defined in the handler.
+ * Output:
+ * - A JSON response or empty success response with an explicit HTTP status.
+ * What this function does:
+ * - It enforces the route boundary, calls the owning service, and maps failures through Hono.
+ */
 app.put("/api/admin/workspaces/:id/capabilities", async (c) => {
   const input = await c.req.json<WorkspaceCapabilities>();
   return c.json(await saveWorkspaceCapabilities(c.env.DB, c.req.param("id"), { webSearch: input.webSearch === true, scheduling: input.scheduling === true, skillSlugs: Array.isArray(input.skillSlugs) ? input.skillSlugs.filter((slug): slug is string => typeof slug === "string") : [] }));
 });
+/**
+ * Input:
+ * - PATCH /api/admin/leads/:id with path, query, or JSON values defined in the handler.
+ * Output:
+ * - A JSON response or empty success response with an explicit HTTP status.
+ * What this function does:
+ * - It enforces the route boundary, calls the owning service, and maps failures through Hono.
+ */
 app.patch("/api/admin/leads/:id", async (c) => {
   const input = await c.req.json<{ status?: Lead["status"] }>();
   if (!input.status || !["new", "reviewing", "scheduled", "closed"].includes(input.status)) return c.json({ error: "Invalid status" }, 400);
   await updateLeadStatus(c.env.DB, c.req.param("id"), input.status);
   return c.json({ ok: true });
 });
+/**
+ * Input:
+ * - GET /api/admin/workspaces/:id with path, query, or JSON values defined in the handler.
+ * Output:
+ * - A JSON response or empty success response with an explicit HTTP status.
+ * What this function does:
+ * - It enforces the route boundary, calls the owning service, and maps failures through Hono.
+ */
 app.get("/api/admin/workspaces/:id", async (c) => {
   const workspaceId = c.req.param("id");
   const managed = await managedWorkspace(c.env.DB, workspaceId);
@@ -171,6 +412,14 @@ app.get("/api/admin/workspaces/:id", async (c) => {
   if (!lead) return c.json({ error: "Workspace not found" }, 404);
   return c.json({ workspaceId, status: lead.workspaceStatus, participants: await workspaceParticipants(c.env.DB, workspaceId), messages: await c.env.PORTFOLIO_SESSION.getByName(workspaceId).history() });
 });
+/**
+ * Input:
+ * - POST /api/admin/workspaces/:id/messages with path, query, or JSON values defined in the handler.
+ * Output:
+ * - A JSON response or empty success response with an explicit HTTP status.
+ * What this function does:
+ * - It enforces the route boundary, calls the owning service, and maps failures through Hono.
+ */
 app.post("/api/admin/workspaces/:id/messages", async (c) => {
   const input = await c.req.json<{ message?: string; recipient?: "visitor" | "agent"; requestId?: string }>();
   if (!input.message?.trim()) return c.json({ error: "message is required" }, 400);
@@ -196,14 +445,38 @@ app.post("/api/admin/workspaces/:id/messages", async (c) => {
     ...await stub.chat(input.message, input.requestId ?? crypto.randomUUID(), false, "Oskar Ablimit", "owner"),
   });
 });
+/**
+ * Input:
+ * - POST /api/admin/workspaces/:id/archive with path, query, or JSON values defined in the handler.
+ * Output:
+ * - A JSON response or empty success response with an explicit HTTP status.
+ * What this function does:
+ * - It enforces the route boundary, calls the owning service, and maps failures through Hono.
+ */
 app.post("/api/admin/workspaces/:id/archive", async (c) => {
   await archiveWorkspace(c.env.DB, c.req.param("id"));
   return c.json({ archived: true });
 });
+/**
+ * Input:
+ * - POST /api/admin/workspaces/:id/restore with path, query, or JSON values defined in the handler.
+ * Output:
+ * - A JSON response or empty success response with an explicit HTTP status.
+ * What this function does:
+ * - It enforces the route boundary, calls the owning service, and maps failures through Hono.
+ */
 app.post("/api/admin/workspaces/:id/restore", async (c) => {
   await restoreWorkspace(c.env.DB, c.req.param("id"));
   return c.json({ restored: true });
 });
+/**
+ * Input:
+ * - DELETE /api/admin/workspaces/:id with path, query, or JSON values defined in the handler.
+ * Output:
+ * - A JSON response or empty success response with an explicit HTTP status.
+ * What this function does:
+ * - It enforces the route boundary, calls the owning service, and maps failures through Hono.
+ */
 app.delete("/api/admin/workspaces/:id", async (c) => {
   const workspaceId = c.req.param("id");
   const lead = await workspaceRecord(c.env.DB, workspaceId);
@@ -212,6 +485,14 @@ app.delete("/api/admin/workspaces/:id", async (c) => {
   await deleteWorkspaceRecord(c.env.DB, workspaceId);
   return c.body(null, 204);
 });
+/**
+ * Input:
+ * - POST /api/admin/agent with path, query, or JSON values defined in the handler.
+ * Output:
+ * - A JSON response or empty success response with an explicit HTTP status.
+ * What this function does:
+ * - It enforces the route boundary, calls the owning service, and maps failures through Hono.
+ */
 app.post("/api/admin/agent", async (c) => {
   const input = await c.req.json<{ message?: string; requestId?: string }>();
   if (!input.message?.trim()) return c.json({ error: "message is required" }, 400);

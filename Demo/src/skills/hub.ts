@@ -1,3 +1,4 @@
+// Application ownership: Durable Cloudflare Computer workspace used to store and run skills.
 import { DurableObject } from "cloudflare:workers";
 import { getWorkspace, withWorkspace } from "@cloudflare/computer";
 import { WorkerShellBackend } from "@cloudflare/computer/backends/worker-shell";
@@ -85,12 +86,28 @@ export class SkillHub extends BaseSkillHub {
     return workspace;
   }
 
+  /**
+   * Input:
+   * - The typed parameters shown in the function signature.
+   * Output:
+   * - The declared return value or Promise; thrown errors follow the caller.
+   * What this function does:
+   * - It owns the commit operation for this module.
+   */
   async #commit(message: string): Promise<void> {
     using workspace = await this.#workspace();
     await workspace.git.add({ dir: "/workspace", paths: [], all: true });
     if ((await workspace.git.status({ dir: "/workspace" })).length > 0) await workspace.git.commit({ dir: "/workspace", message });
   }
 
+  /**
+   * Input:
+   * - The typed parameters shown in the function signature.
+   * Output:
+   * - The declared return value or Promise; thrown errors follow the caller.
+   * What this function does:
+   * - It reads and returns an ordered collection.
+   */
   async listSkills(audience?: "visitor" | "content"): Promise<SkillSummary[]> {
     using workspace = await this.#workspace();
     const skills: SkillSummary[] = [];
@@ -105,6 +122,14 @@ export class SkillHub extends BaseSkillHub {
     return skills.sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
   }
 
+  /**
+   * Input:
+   * - The typed parameters shown in the function signature.
+   * Output:
+   * - The declared return value or Promise; thrown errors follow the caller.
+   * What this function does:
+   * - It reads one matching record.
+   */
   async getSkill(slugValue: string, audience?: "visitor" | "content"): Promise<SkillRecord | null> {
     const slug = requireSlug(slugValue);
     using workspace = await this.#workspace();
@@ -119,6 +144,14 @@ export class SkillHub extends BaseSkillHub {
     return audience && !appliesTo(record, audience) ? null : record;
   }
 
+  /**
+   * Input:
+   * - The typed parameters shown in the function signature.
+   * Output:
+   * - The declared return value or Promise; thrown errors follow the caller.
+   * What this function does:
+   * - It validates and persists the requested state.
+   */
   async saveSkill(input: SaveSkillInput): Promise<SkillRecord> {
     const slug = requireSlug(input.slug);
     const name = requireText(input.name, "Skill name", 200);
@@ -144,6 +177,14 @@ export class SkillHub extends BaseSkillHub {
     return saved;
   }
 
+  /**
+   * Input:
+   * - The typed parameters shown in the function signature.
+   * Output:
+   * - The declared return value or Promise; thrown errors follow the caller.
+   * What this function does:
+   * - It permanently removes the selected state.
+   */
   async deleteSkill(slugValue: string): Promise<boolean> {
     const slug = requireSlug(slugValue);
     using workspace = await this.#workspace();
@@ -153,6 +194,14 @@ export class SkillHub extends BaseSkillHub {
     return true;
   }
 
+  /**
+   * Input:
+   * - The typed parameters shown in the function signature.
+   * Output:
+   * - The declared return value or Promise; thrown errors follow the caller.
+   * What this function does:
+   * - It loads validated data.
+   */
   async readSkillFile(slugValue: string, relativePath: string, audience?: "visitor" | "content"): Promise<string> {
     const slug = requireSlug(slugValue);
     if (!(await this.getSkill(slug, audience))) throw new Error("Skill not found for this agent");
@@ -160,6 +209,14 @@ export class SkillHub extends BaseSkillHub {
     return workspace.fs.readFile(`${skillDirectory(slug)}/${safeRelativePath(relativePath)}`, "utf8");
   }
 
+  /**
+   * Input:
+   * - The typed parameters shown in the function signature.
+   * Output:
+   * - The declared return value or Promise; thrown errors follow the caller.
+   * What this function does:
+   * - It validates and stores data.
+   */
   async writeSkillFile(slugValue: string, relativePath: string, content: string): Promise<{ path: string }> {
     const slug = requireSlug(slugValue);
     if (!(await this.getSkill(slug))) throw new Error("Skill not found");
@@ -173,6 +230,14 @@ export class SkillHub extends BaseSkillHub {
     return { path };
   }
 
+  /**
+   * Input:
+   * - The typed parameters shown in the function signature.
+   * Output:
+   * - The declared return value or Promise; thrown errors follow the caller.
+   * What this function does:
+   * - It executes the requested operation and returns its result.
+   */
   async runSkillCommand(slugValue: string, command: string, audience: "visitor" | "content"): Promise<SkillRunResult> {
     const slug = requireSlug(slugValue);
     const skill = await this.getSkill(slug, audience);
@@ -184,6 +249,14 @@ export class SkillHub extends BaseSkillHub {
     return { exitCode: result.exitCode, stdout: result.stdout, stderr: result.stderr, status: result.status };
   }
 
+  /**
+   * Input:
+   * - The typed parameters shown in the function signature.
+   * Output:
+   * - The declared return value or Promise; thrown errors follow the caller.
+   * What this function does:
+   * - It reads and returns an ordered collection.
+   */
   async listComputerFiles(): Promise<ComputerFileEntry[]> {
     using workspace = await this.#workspace();
     return (await workspace.fs.find(SKILLS_DIRECTORY))
@@ -200,6 +273,14 @@ export class SkillHub extends BaseSkillHub {
     return { path, content };
   }
 
+  /**
+   * Input:
+   * - The typed parameters shown in the function signature.
+   * Output:
+   * - The declared return value or Promise; thrown errors follow the caller.
+   * What this function does:
+   * - It turns typed data into user-visible output.
+   */
   async renderCatalog(audience: "visitor" | "content"): Promise<string> {
     const skills = (await this.listSkills(audience)).filter((skill) => skill.enabled);
     if (!skills.length) return `No ${audience} skills are currently enabled.`;

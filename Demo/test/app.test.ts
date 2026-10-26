@@ -1,3 +1,4 @@
+// Application ownership: Application-owned ts module in test.
 import { describe, expect, it } from "vitest";
 import app from "../src/app";
 import { OWNER_PROMPT, VISITOR_PROMPT } from "../src/agent/prompt";
