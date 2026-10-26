@@ -8,6 +8,7 @@ import {
 } from "./data/leads";
 import { anonymousChat } from "./agent/anonymous";
 import type { BlogPost, ChatMessage, Lead, SiteSection } from "./shared/types";
+import type { SaveSkillInput } from "./skills/types";
 
 const app = new Hono<{ Bindings: Env }>();
 app.use("/api/*", cors({ origin: (origin) => origin, credentials: true }));
@@ -105,6 +106,33 @@ app.post("/api/workspaces/:id/messages", async (c) => {
 
 app.use("/api/admin/*", requireAdmin);
 app.get("/api/admin/me", (c) => c.json({ email: adminEmail(c.req.raw) ?? "local-development" }));
+app.get("/api/admin/skills", async (c) => c.json({ skills: await c.env.SKILL_HUB.getByName("global").listSkills() }));
+app.get("/api/admin/skills/:slug", async (c) => {
+  const skill = await c.env.SKILL_HUB.getByName("global").getSkill(c.req.param("slug"));
+  return skill ? c.json(skill) : c.json({ error: "Skill not found" }, 404);
+});
+app.post("/api/admin/skills", async (c) => {
+  const input = await c.req.json<SaveSkillInput>();
+  return c.json(await c.env.SKILL_HUB.getByName("global").saveSkill({ ...input, updatedBy: adminEmail(c.req.raw) ?? "local-development" }), 201);
+});
+app.put("/api/admin/skills/:slug", async (c) => {
+  const input = await c.req.json<Omit<SaveSkillInput, "slug">>();
+  return c.json(await c.env.SKILL_HUB.getByName("global").saveSkill({ ...input, slug: c.req.param("slug"), updatedBy: adminEmail(c.req.raw) ?? "local-development" }));
+});
+app.delete("/api/admin/skills/:slug", async (c) => {
+  const deleted = await c.env.SKILL_HUB.getByName("global").deleteSkill(c.req.param("slug"));
+  return deleted ? c.json({ deleted: true }) : c.json({ error: "Skill not found" }, 404);
+});
+app.post("/api/admin/skills/:slug/command", async (c) => {
+  const input = await c.req.json<{ command?: string }>();
+  if (!input.command?.trim()) return c.json({ error: "command is required" }, 400);
+  return c.json(await c.env.SKILL_HUB.getByName("global").runSkillCommand(c.req.param("slug"), input.command, "content"));
+});
+app.get("/api/admin/computer", async (c) => c.json({ root: "/workspace/skills", entries: await c.env.SKILL_HUB.getByName("global").listComputerFiles() }));
+app.get("/api/admin/computer/file", async (c) => {
+  const path = c.req.query("path");
+  return path ? c.json(await c.env.SKILL_HUB.getByName("global").readComputerFile(path)) : c.json({ error: "path is required" }, 400);
+});
 app.get("/api/admin/content", async (c) => c.json({ sections: await listSections(c.env.DB, true), posts: await listPosts(c.env.DB, true) }));
 app.put("/api/admin/sections/:id", async (c) => {
   const input = await c.req.json<Omit<SiteSection, "id" | "updatedAt">>();

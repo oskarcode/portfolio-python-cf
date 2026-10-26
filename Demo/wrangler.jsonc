@@ -4,7 +4,10 @@
   "account_id": "f2b0debf4bd2bf50f7d1a81d1ab88946",
   "main": "src/index.ts",
   "compatibility_date": "2026-10-24",
-  "compatibility_flags": ["nodejs_compat"],
+  "compatibility_flags": ["nodejs_compat", "experimental"],
+  "worker_loaders": [
+    { "binding": "SKILL_LOADER" }
+  ],
   "observability": {
     "enabled": true,
     "head_sampling_rate": 1,
@@ -36,7 +39,8 @@
   ],
   "durable_objects": {
     "bindings": [
-      { "name": "PORTFOLIO_SESSION", "class_name": "PortfolioSession" }
+      { "name": "PORTFOLIO_SESSION", "class_name": "PortfolioSession" },
+      { "name": "SKILL_HUB", "class_name": "SkillHub" }
     ]
   },
   "migrations": [
@@ -50,6 +54,7 @@
       "deleted_classes": ["FlueRegistry", "MissionControl", "AssistantWorkflow", "ContentWorkflow", "ManageWorkflow", "SyncLiveWorkflow", "HealthWorkflow"]
     },
     { "tag": "v4", "new_sqlite_classes": ["WebMcpChat"] },
-    { "tag": "v5", "new_sqlite_classes": ["PortfolioSession"], "deleted_classes": ["WebMcpChat"] }
+    { "tag": "v5", "new_sqlite_classes": ["PortfolioSession"], "deleted_classes": ["WebMcpChat"] },
+    { "tag": "v6", "new_sqlite_classes": ["SkillHub"] }
   ]
 }

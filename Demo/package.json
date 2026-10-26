@@ -14,9 +14,11 @@
     "types": "wrangler types --include-runtime false"
   },
   "dependencies": {
+    "@cloudflare/computer": "0.5.1",
     "@earendil-works/chord": "1.2.0",
     "@earendil-works/pi-ai": "1.2.0",
     "@earendil-works/pi-durable": "1.2.0",
+    "@platformatic/vfs": "0.5.0",
     "agents": "0.28.1",
     "hono": "^4.10.7",
     "react": "^19.2.0",

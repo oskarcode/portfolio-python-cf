@@ -1,4 +1,5 @@
 import type { BlogPost, ChatMessage, Lead, SiteSection, WorkspaceSnapshot } from "../shared/types";
+import type { ComputerFileEntry, SaveSkillInput, SkillRecord, SkillSummary } from "../skills/types";
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, { ...init, headers: { "Content-Type": "application/json", ...init?.headers } });
@@ -21,6 +22,13 @@ export const api = {
     }),
   workspaceHistory: (id: string) => request<WorkspaceSnapshot>(`/api/workspaces/${id}`),
   adminContent: () => request<{ sections: SiteSection[]; posts: BlogPost[] }>("/api/admin/content"),
+  skills: () => request<{ skills: SkillSummary[] }>("/api/admin/skills"),
+  skill: (slug: string) => request<SkillRecord>(`/api/admin/skills/${encodeURIComponent(slug)}`),
+  saveSkill: (input: SaveSkillInput, existing = false) => request<SkillRecord>(existing ? `/api/admin/skills/${encodeURIComponent(input.slug)}` : "/api/admin/skills", { method: existing ? "PUT" : "POST", body: JSON.stringify(input) }),
+  deleteSkill: (slug: string) => request<{ deleted: boolean }>(`/api/admin/skills/${encodeURIComponent(slug)}`, { method: "DELETE" }),
+  computerFiles: () => request<{ root: string; entries: ComputerFileEntry[] }>("/api/admin/computer"),
+  computerFile: (path: string) => request<{ path: string; content: string }>(`/api/admin/computer/file?path=${encodeURIComponent(path)}`),
+  runSkillCommand: (slug: string, command: string) => request<{ exitCode: number; stdout: string; stderr: string; status: string }>(`/api/admin/skills/${encodeURIComponent(slug)}/command`, { method: "POST", body: JSON.stringify({ command }) }),
   leads: () => request<{ leads: Lead[] }>("/api/admin/leads"),
   workspace: (id: string) => request<WorkspaceSnapshot>(`/api/admin/workspaces/${id}`),
   ownerWorkspaceMessage: (id: string, message: string, recipient: "visitor" | "agent") =>

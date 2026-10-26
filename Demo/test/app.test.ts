@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import app from "../src/app";
 import { OWNER_PROMPT, VISITOR_PROMPT } from "../src/agent/prompt";
+import { createSkillTools, type SkillHubCaller } from "../src/skills/tools";
 
 describe("API boundaries", () => {
   it("protects admin APIs when Cloudflare Access identity is absent", async () => {
@@ -34,8 +35,23 @@ describe("API boundaries", () => {
 describe("agent controls", () => {
   it("keeps visitor and owner responsibilities separate", () => {
     expect(VISITOR_PROMPT).toContain("Never ask for personal information");
-    expect(VISITOR_PROMPT).toContain("cannot edit content");
+    expect(VISITOR_PROMPT).toContain("cannot edit content or skills");
+    expect(VISITOR_PROMPT).toContain("Never execute arbitrary commands");
     expect(OWNER_PROMPT).toContain("private portfolio content agent");
     expect(OWNER_PROMPT).toContain("Never invent credentials");
+  });
+
+  it("allows visitor agents to use approved skills without authoring them", () => {
+    const hub = {} as SkillHubCaller;
+    const visitorTools = createSkillTools(hub, "visitor", false).map((tool) => tool.name);
+    const ownerTools = createSkillTools(hub, "content", true).map((tool) => tool.name);
+    expect(visitorTools).toContain("activate_skill");
+    expect(visitorTools).toContain("run_skill_command");
+    expect(visitorTools).not.toContain("save_skill");
+    expect(visitorTools).not.toContain("write_skill_file");
+    expect(ownerTools).toContain("content_activate_skill");
+    expect(ownerTools).toContain("content_run_skill_command");
+    expect(ownerTools).toContain("save_skill");
+    expect(ownerTools).toContain("write_skill_file");
   });
 });

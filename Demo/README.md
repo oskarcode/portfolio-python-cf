@@ -8,6 +8,7 @@ A Cloudflare-native portfolio for Oskar Ablimit with a professional website, an 
 - **React + Vite + Workers Static Assets** — website, chat, blog, and admin UI
 - **Workers AI (`@cf/zai-org/glm-5.2`) + AI Gateway** — conversational inference
 - **Pi Durable + Durable Object SQLite** — persistent opt-in and owner workspaces
+- **Cloudflare Computer + Worker Loader** — durable, Git-versioned skill files and isolated Worker Shell commands
 - **D1** — sections, blog posts, leads, and revisions
 - **R2** — media binding for future uploads
 - **Cloudflare Access** — required for production `/api/admin/*` requests
@@ -22,7 +23,10 @@ Anonymous messages are held only in React state and sent as bounded context to a
 | `/chat` | Ephemeral conversational portfolio |
 | `/chat/:workspaceId` | Consented persistent visitor/Oskar/agent workspace |
 | `/blog` and `/blog/:slug` | Local writing |
-| `/admin` | Content agent and lead inbox |
+| `/admin` | Private content agent |
+| `/admin/inbox` | Visitor workspace inbox |
+| `/admin/content` and `/admin/blog` | Content catalogs |
+| `/admin/skills` | Cloudflare Computer Skill Hub |
 | `/api/*` | Hono APIs |
 
 ## Local development
@@ -53,7 +57,7 @@ npm run db:migrate:remote
 npm run deploy
 ```
 
-The immutable Durable Object migration history is preserved. Migration `v5` introduces `PortfolioSession` and retires the former `WebMcpChat` class.
+The immutable Durable Object migration history is preserved. Migration `v5` introduces `PortfolioSession` and retires the former `WebMcpChat` class. Migration `v6` adds the global `SkillHub` Durable Object and its Cloudflare Computer workspace.
 
 ## Admin security
 
@@ -68,3 +72,9 @@ Production admin APIs require the `Cf-Access-Authenticated-User-Email` header. C
 - `content_revisions` records the previous value before agent or API updates.
 
 The owner agent receives content mutation tools only in the fixed private `owner-content` Pi Durable workspace. Shared visitor workspaces receive read-only portfolio tools. Direct visitor/Oskar messages are durable transcript entries without model inference; either participant can explicitly choose **Ask the agent** to start a GLM 5.2 turn using that workspace's history. Admin can reply as Oskar, ask the workspace agent, copy the invitation URL, archive/restore a workspace, or permanently delete its D1 and Durable Object records.
+
+## Skill Hub and Computer permissions
+
+`/admin/skills` is Access-protected and lets Oskar create, edit, enable, scope, test, and delete reusable skills. A skill can target **Visitor durable chat**, **Content agent**, or **Both agents**. Skills are stored under `/workspace/skills/<slug>` in one deployment-global Cloudflare Computer workspace; changes are committed to its internal Git repository.
+
+Both Pi Durable agents can discover and activate enabled skills in their scope, read supporting files, and execute the bundled Worker Shell commands (`curl`, file tools, HTML-to-Markdown, JavaScript, and `jq`) inside that skill directory. Only the private content agent and Access-protected admin can author skills or supporting files. Visitor agents are deterministically denied the skill-writing tools and are instructed to reject arbitrary visitor-supplied commands.

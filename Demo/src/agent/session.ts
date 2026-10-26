@@ -8,13 +8,13 @@ import {
   defineEntry,
   defineExtension,
   Harness,
-  section,
   UserEntry,
   type Conversation,
 } from "@earendil-works/pi-durable";
 import { openDurableObjectSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/cloudflare";
 import type { ChatMessage, WorkspaceMessage } from "../shared/types";
 import { createOwnerTools, createPortfolioTools } from "./tools";
+import { createSkillTools } from "../skills/tools";
 import { OWNER_PROMPT, VISITOR_PROMPT } from "./prompt";
 
 const MODEL = "@cf/zai-org/glm-5.2";
@@ -56,10 +56,13 @@ export class PortfolioSession extends DurableObject<Env> {
     models.setProvider(workersAI.provider);
     const publicTools = createPortfolioTools(this.env.DB, this.env.BOOKING_URL);
     const ownerTools = createOwnerTools(this.env.DB);
+    const skillHub = this.env.SKILL_HUB.getByName("global");
+    const visitorSkillTools = createSkillTools(skillHub, "visitor", false);
+    const contentSkillTools = createSkillTools(skillHub, "content", true);
     const extension = defineExtension({
       name: "portfolio",
-      tools: [...publicTools, ...ownerTools],
-      sections: [section("preamble", () => VISITOR_PROMPT, { tag: false })],
+      tools: [...publicTools, ...ownerTools, ...visitorSkillTools, ...contentSkillTools],
+      sections: [],
     });
     const registry = createRegistry();
     registry.install(extension);
@@ -78,19 +81,24 @@ export class PortfolioSession extends DurableObject<Env> {
     await this.#ready;
     const publicTools = createPortfolioTools(this.env.DB, this.env.BOOKING_URL);
     const ownerTools = createOwnerTools(this.env.DB);
+    const skillHub = this.env.SKILL_HUB.getByName("global");
+    const skillTools = createSkillTools(skillHub, owner ? "content" : "visitor", owner);
+    const tools = owner ? [...publicTools, ...ownerTools, ...skillTools] : [...publicTools, ...skillTools];
+    const skillCatalog = await skillHub.renderCatalog(owner ? "content" : "visitor");
+    const instructions = `${owner ? OWNER_PROMPT : VISITOR_PROMPT}\n\n${skillCatalog}`;
     const conversation = await this.#harness.root(BACKGROUND_CONTEXT, {
       agent: {
         model: { provider: "cloudflare", modelId: MODEL },
         thinkingLevel: "high",
-        tools: owner ? [...publicTools, ...ownerTools] : [...publicTools],
-        instructions: owner ? OWNER_PROMPT : null,
+        tools,
+        instructions,
       },
     });
     await conversation.configure({
       model: { provider: "cloudflare", modelId: MODEL },
       thinkingLevel: "high",
-      tools: owner ? [...publicTools, ...ownerTools] : [...publicTools],
-      instructions: owner ? OWNER_PROMPT : null,
+      tools,
+      instructions,
     }, BACKGROUND_CONTEXT);
     return conversation;
   }
