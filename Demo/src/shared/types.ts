@@ -69,4 +69,21 @@ export interface WorkspaceSnapshot {
   messages: WorkspaceMessage[];
 }
 
+export interface AdminWorkspaceSummary {
+  id: string;
+  title: string;
+  purpose: string;
+  kind: "managed" | "visitor";
+  status: "active" | "archived";
+  updatedAt: string;
+  visitorName?: string;
+  visitorEmail?: string;
+}
+
+export interface WorkspaceCapabilities {
+  webSearch: boolean;
+  scheduling: boolean;
+  skillSlugs: string[];
+}
+
 export const BOOKING_URL = "https://calendar.google.com/calendar/appointments/schedules/AcZssZ1xHKYdvcfsUs7Oj4wKIW8UOZmpNdOAyNYtDq0vI_WNlV_m_vuKA7QkDmlNYhgmXGHueVxGDPgw?gv=true";

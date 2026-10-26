@@ -16,20 +16,22 @@ export interface SkillHubCaller {
 const text = (value: unknown) => ({ output: [{ type: "text" as const, text: typeof value === "string" ? value : JSON.stringify(value) }] });
 
 /** Skill discovery and Computer tools, permissioned for the active agent. */
-export function createSkillTools(hub: SkillHubCaller, audience: Audience, canAuthor: boolean): ToolRegistration[] {
+export function createSkillTools(hub: SkillHubCaller, audience: Audience, canAuthor: boolean, allowedSlugs: readonly string[] | (() => Promise<readonly string[]>) = []): ToolRegistration[] {
   const prefix = audience === "content" ? "content_" : "";
+  const allowed = async () => new Set(typeof allowedSlugs === "function" ? await allowedSlugs() : allowedSlugs);
   const tools: ToolRegistration[] = [
     {
       name: `${prefix}list_skills`,
       description: "List approved reusable skills available to this agent.",
       parameters: Type.Object({}), replay: "safe",
-      execute: async () => text(await hub.listSkills(audience)),
+      execute: async () => { const selected = await allowed(); return text((await hub.listSkills(audience)).filter((skill) => selected.has(skill.slug))); },
     },
     {
       name: `${prefix}activate_skill`,
       description: "Load an approved skill's complete instructions before using that skill.",
       parameters: Type.Object({ slug: Type.String({ minLength: 1, maxLength: 80 }) }), replay: "safe",
       execute: async ({ slug }: { slug: string }) => {
+        if (!(await allowed()).has(slug)) return text(`Skill is not attached to this workspace: ${slug}`);
         const skill = await hub.getSkill(slug, audience);
         if (!skill?.enabled) return text(`Skill not found or disabled: ${slug}`);
         return text(`<skill_content name=${JSON.stringify(skill.slug)}>\n${skill.markdown}\n</skill_content>`);
@@ -39,7 +41,10 @@ export function createSkillTools(hub: SkillHubCaller, audience: Audience, canAut
       name: `${prefix}read_skill_file`,
       description: "Read a reference, template, data file, or script belonging to an activated skill.",
       parameters: Type.Object({ slug: Type.String(), path: Type.String() }), replay: "safe",
-      execute: async ({ slug, path }: { slug: string; path: string }) => text(await hub.readSkillFile(slug, path, audience)),
+      execute: async ({ slug, path }: { slug: string; path: string }) => {
+        if (!(await allowed()).has(slug)) throw new Error(`Skill is not attached to this workspace: ${slug}`);
+        return text(await hub.readSkillFile(slug, path, audience));
+      },
     },
     {
       name: `${prefix}run_skill_command`,
@@ -48,6 +53,7 @@ export function createSkillTools(hub: SkillHubCaller, audience: Audience, canAut
       structuredOutputSchema: Type.Object({ exitCode: Type.Number(), stdout: Type.String(), stderr: Type.String(), status: Type.String() }),
       replay: "unsafe",
       execute: async ({ slug, command }: { slug: string; command: string }) => {
+        if (!(await allowed()).has(slug)) throw new Error(`Skill is not attached to this workspace: ${slug}`);
         const result = await hub.runSkillCommand(slug, command, audience);
         return { ...text(result), structuredOutput: result, isError: result.exitCode !== 0 };
       },

@@ -10,12 +10,17 @@ import {
   Harness,
   UserEntry,
   type Conversation,
+  type ConversationId,
+  type TaskId,
 } from "@earendil-works/pi-durable";
 import { openDurableObjectSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/cloudflare";
 import type { ChatMessage, WorkspaceMessage } from "../shared/types";
 import { createOwnerTools, createPortfolioTools } from "./tools";
 import { createSkillTools } from "../skills/tools";
 import { OWNER_PROMPT, VISITOR_PROMPT } from "./prompt";
+import { createWebTools } from "./web-tools";
+import { createScheduleTools, DeliverScheduledInstruction, matchesSchedule, scheduledDeadline } from "./scheduling";
+import { managedWorkspace, workspaceCapabilities } from "../data/workspaces";
 
 const MODEL = "@cf/zai-org/glm-5.2";
 
@@ -43,10 +48,18 @@ function messageText(value: unknown): string {
 export class PortfolioSession extends DurableObject<Env> {
   #harness!: Harness;
   #ready: Promise<void>;
+  #workspaceId: string;
+  #alarmUpdate: Promise<void> = Promise.resolve();
+  #alarmTaskWatches = new Set<TaskId>();
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
+    this.#workspaceId = ctx.id.name ?? ctx.id.toString();
     this.#ready = ctx.blockConcurrencyWhile(() => this.#initialize());
+  }
+
+  async #attachedSkillSlugs(): Promise<string[]> {
+    return (await workspaceCapabilities(this.env.DB, this.#workspaceId)).skillSlugs;
   }
 
   async #initialize(): Promise<void> {
@@ -57,11 +70,18 @@ export class PortfolioSession extends DurableObject<Env> {
     const publicTools = createPortfolioTools(this.env.DB, this.env.BOOKING_URL);
     const ownerTools = createOwnerTools(this.env.DB);
     const skillHub = this.env.SKILL_HUB.getByName("global");
-    const visitorSkillTools = createSkillTools(skillHub, "visitor", false);
-    const contentSkillTools = createSkillTools(skillHub, "content", true);
+    const allowedSkills = () => this.#attachedSkillSlugs();
+    const visitorSkillTools = createSkillTools(skillHub, "visitor", false, allowedSkills);
+    const contentSkillTools = createSkillTools(skillHub, "content", true, allowedSkills);
+    const webTools = createWebTools(this.env);
+    const scheduleTools = createScheduleTools(
+      (timestamp) => this.#setAlarmNoLaterThan(timestamp),
+      (conversationId, scheduleId) => this.#cancelSchedule(conversationId, scheduleId),
+    );
     const extension = defineExtension({
       name: "portfolio",
-      tools: [...publicTools, ...ownerTools, ...visitorSkillTools, ...contentSkillTools],
+      tasks: [DeliverScheduledInstruction],
+      tools: [...publicTools, ...ownerTools, ...visitorSkillTools, ...contentSkillTools, ...webTools, ...scheduleTools],
       sections: [],
     });
     const registry = createRegistry();
@@ -82,10 +102,17 @@ export class PortfolioSession extends DurableObject<Env> {
     const publicTools = createPortfolioTools(this.env.DB, this.env.BOOKING_URL);
     const ownerTools = createOwnerTools(this.env.DB);
     const skillHub = this.env.SKILL_HUB.getByName("global");
-    const skillTools = createSkillTools(skillHub, owner ? "content" : "visitor", owner);
-    const tools = owner ? [...publicTools, ...ownerTools, ...skillTools] : [...publicTools, ...skillTools];
-    const skillCatalog = await skillHub.renderCatalog(owner ? "content" : "visitor");
-    const instructions = `${owner ? OWNER_PROMPT : VISITOR_PROMPT}\n\n${skillCatalog}`;
+    const capabilities = await workspaceCapabilities(this.env.DB, this.#workspaceId);
+    const skillTools = createSkillTools(skillHub, owner ? "content" : "visitor", owner, () => this.#attachedSkillSlugs());
+    const webTools = capabilities.webSearch ? createWebTools(this.env) : [];
+    const scheduleTools = capabilities.scheduling ? createScheduleTools((timestamp) => this.#setAlarmNoLaterThan(timestamp), (conversationId, scheduleId) => this.#cancelSchedule(conversationId, scheduleId)) : [];
+    const tools = owner ? [...publicTools, ...ownerTools, ...skillTools, ...webTools, ...scheduleTools] : [...publicTools, ...skillTools, ...webTools, ...scheduleTools];
+    const availableSkills = (await skillHub.listSkills(owner ? "content" : "visitor")).filter((skill) => skill.enabled && capabilities.skillSlugs.includes(skill.slug));
+    const skillCatalog = availableSkills.length ? `Skills attached to this workspace:\n${availableSkills.map((skill) => `- ${skill.slug}: ${skill.description}`).join("\n")}\nActivate a matching skill before using it.` : "No reusable skills are attached to this workspace.";
+    const managed = owner ? await managedWorkspace(this.env.DB, this.#workspaceId) : null;
+    const workspaceContext = managed ? `Workspace purpose: ${managed.purpose}` : "This is a visitor collaboration workspace.";
+    const toolContext = `Workspace tools: web search ${capabilities.webSearch ? "enabled" : "disabled"}; scheduling ${capabilities.scheduling ? "enabled" : "disabled"}.`;
+    const instructions = `${owner ? OWNER_PROMPT : VISITOR_PROMPT}\n\n${workspaceContext}\n${toolContext}\n\n${skillCatalog}`;
     const conversation = await this.#harness.root(BACKGROUND_CONTEXT, {
       agent: {
         model: { provider: "cloudflare", modelId: MODEL },
@@ -111,9 +138,12 @@ export class PortfolioSession extends DurableObject<Env> {
         const data = entry.data;
         messages.push({ id: entry.id, sender: data.sender, senderName: data.senderName, audience: data.audience, content: data.text, timestamp: data.timestamp });
       } else if (UserEntry.is(entry)) {
-        messages.push({ id: entry.id, sender: "visitor", senderName: "Visitor", audience: "agent", content: messageText(entry.model?.[0]?.content), timestamp: Number(entry.model?.[0]?.timestamp ?? Date.now()) });
+        const content = messageText(entry.model?.[0]?.content);
+        const scheduled = content.startsWith("Scheduled instruction due now: ");
+        messages.push({ id: entry.id, sender: scheduled ? "agent" : "visitor", senderName: scheduled ? "Scheduled task" : "Visitor", audience: "agent", content: scheduled ? content.slice("Scheduled instruction due now: ".length) : content, timestamp: Number(entry.model?.[0]?.timestamp ?? Date.now()) });
       } else if (AssistantEntry.is(entry)) {
-        messages.push({ id: entry.id, sender: "agent", senderName: "Portfolio Agent", audience: "all", content: messageText(entry.model?.[0]?.content), timestamp: Number(entry.model?.[0]?.timestamp ?? Date.now()) });
+        const content = messageText(entry.model?.[0]?.content);
+        if (content.trim()) messages.push({ id: entry.id, sender: "agent", senderName: "Portfolio Agent", audience: "all", content, timestamp: Number(entry.model?.[0]?.timestamp ?? Date.now()) });
       }
     }
     return messages;
@@ -185,8 +215,56 @@ export class PortfolioSession extends DurableObject<Env> {
     return this.chat(`I have added Oskar to this workspace. My goal is: ${intent}. Acknowledge the handoff briefly and explain that I can message Oskar directly or ask you for help.`, crypto.randomUUID(), false, visitorName);
   }
 
-  async history(): Promise<WorkspaceMessage[]> {
-    return this.#historyFrom(await this.#conversation(false));
+  async history(owner = false): Promise<WorkspaceMessage[]> {
+    return this.#historyFrom(await this.#conversation(owner));
+  }
+
+  async #cancelSchedule(conversationId: ConversationId, scheduleId: string): Promise<number> {
+    const { tasks } = await this.#harness.inspect(BACKGROUND_CONTEXT);
+    const matches = tasks.filter((task) => matchesSchedule(task, conversationId, scheduleId));
+    for (const task of matches) await this.#harness.abortTask(task.record.id, BACKGROUND_CONTEXT);
+    await this.#refreshAlarm();
+    return matches.length;
+  }
+
+  async #refreshAlarm(): Promise<void> {
+    await this.#ready;
+    const { tasks } = await this.#harness.inspect(BACKGROUND_CONTEXT);
+    const now = Date.now();
+    let next: number | undefined;
+    for (const task of tasks) {
+      const deadline = scheduledDeadline(task);
+      if (deadline === undefined) continue;
+      if (deadline > now) next = next === undefined ? deadline : Math.min(next, deadline);
+      else this.#watchTask(task.record.id);
+    }
+    await this.ctx.storage.transaction(async (transaction) => {
+      if (next === undefined) await transaction.deleteAlarm();
+      else await transaction.setAlarm(next);
+    });
+  }
+
+  #setAlarmNoLaterThan(timestamp: number): Promise<void> {
+    const operation = () => this.ctx.storage.transaction(async (transaction) => {
+      const current = await transaction.getAlarm();
+      if (current === null || timestamp < current) await transaction.setAlarm(timestamp);
+    });
+    const update = this.#alarmUpdate.then(operation, operation);
+    this.#alarmUpdate = update;
+    return update;
+  }
+
+  #watchTask(taskId: TaskId): void {
+    if (this.#alarmTaskWatches.has(taskId)) return;
+    this.#alarmTaskWatches.add(taskId);
+    void this.#harness.waitForTask(taskId, BACKGROUND_CONTEXT).finally(() => {
+      this.#alarmTaskWatches.delete(taskId);
+      void this.#refreshAlarm();
+    });
+  }
+
+  override async alarm(): Promise<void> {
+    await this.#refreshAlarm();
   }
 
   async deleteWorkspace(): Promise<void> {

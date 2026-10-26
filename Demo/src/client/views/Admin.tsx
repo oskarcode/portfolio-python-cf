@@ -1,76 +1,75 @@
 import { FormEvent, useEffect, useState } from "react";
 import { api } from "../api";
-import type { BlogPost, ChatMessage, Lead, SiteSection, WorkspaceMessage } from "../../shared/types";
+import type { AdminWorkspaceSummary, WorkspaceCapabilities, WorkspaceMessage } from "../../shared/types";
+import type { SkillSummary } from "../../skills/types";
 import { AdminSkills } from "../components/AdminSkills";
+import { ChatResponse } from "../components/ChatResponse";
 
-type AdminPage = "agent" | "inbox" | "content" | "blog" | "skills";
-const pageFromPath = (): AdminPage => {
-  const segment = window.location.pathname.split("/")[2];
-  return segment === "inbox" || segment === "content" || segment === "blog" || segment === "skills" ? segment : "agent";
-};
+const emptyCapabilities: WorkspaceCapabilities = { webSearch: false, scheduling: false, skillSlugs: [] };
 
 export function Admin() {
-  const page = pageFromPath();
-  const [leads, setLeads] = useState<Lead[]>([]);
-  const [sections, setSections] = useState<SiteSection[]>([]);
-  const [posts, setPosts] = useState<BlogPost[]>([]);
-  const [messages, setMessages] = useState<ChatMessage[]>([{ role: "assistant", content: "What would you like to update? I can inspect, draft, and publish portfolio sections or blog content." }]);
+  const skillsPage = window.location.pathname === "/admin/skills";
+  const [workspaces, setWorkspaces] = useState<AdminWorkspaceSummary[]>([]);
+  const [selectedId, setSelectedId] = useState(new URLSearchParams(location.search).get("workspace") ?? "owner-content");
+  const [messages, setMessages] = useState<WorkspaceMessage[]>([]);
+  const [capabilities, setCapabilities] = useState<WorkspaceCapabilities>(emptyCapabilities);
+  const [skills, setSkills] = useState<SkillSummary[]>([]);
   const [input, setInput] = useState("");
+  const [recipient, setRecipient] = useState<"visitor" | "agent">("agent");
+  const [settings, setSettings] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [selected, setSelected] = useState<Lead | null>(null);
-  const [transcript, setTranscript] = useState<WorkspaceMessage[]>([]);
-  const [reply, setReply] = useState("");
-  const [workspaceRecipient, setWorkspaceRecipient] = useState<"visitor" | "agent">("visitor");
   const [notice, setNotice] = useState("");
 
-  const loadLeads = () => api.leads().then((data) => setLeads(data.leads)).catch((error: Error) => setNotice(error.message));
-  const loadContent = () => api.adminContent().then((data) => { setSections(data.sections); setPosts(data.posts); }).catch((error: Error) => setNotice(error.message));
-  const refreshWorkspace = async (lead: Lead) => setTranscript((await api.workspace(lead.workspaceId)).messages);
-  useEffect(() => { if (page === "inbox") void loadLeads(); if (page === "content" || page === "blog") void loadContent(); }, [page]);
-
-  const send = async (event: FormEvent) => {
-    event.preventDefault(); if (!input.trim() || busy) return;
-    const text = input; setInput(""); setMessages((value) => [...value, { role: "user", content: text }]); setBusy(true);
-    try { const result = await api.ownerChat(text); setMessages((value) => [...value, { role: "assistant", content: result.answer }]); }
-    catch (error) { setMessages((value) => [...value, { role: "assistant", content: error instanceof Error ? error.message : "Request failed" }]); }
-    finally { setBusy(false); }
+  const selected = workspaces.find((workspace) => workspace.id === selectedId);
+  const loadWorkspaces = async () => { const data = await api.adminWorkspaces(); setWorkspaces(data.workspaces); if (!data.workspaces.some((item) => item.id === selectedId) && data.workspaces[0]) setSelectedId(data.workspaces[0].id); };
+  const loadWorkspace = async (id: string) => {
+    const [snapshot, tools, skillData] = await Promise.all([api.workspace(id), api.workspaceCapabilities(id), api.skills()]);
+    setMessages(snapshot.messages); setCapabilities(tools); setSkills(skillData.skills); setNotice("");
   };
-  const openLead = async (lead: Lead) => { setSelected(lead); setWorkspaceRecipient("visitor"); await refreshWorkspace(lead); };
-  const sendReply = async (event: FormEvent) => {
-    event.preventDefault(); if (!selected || !reply.trim()) return;
-    setBusy(true);
-    try { await api.ownerWorkspaceMessage(selected.workspaceId, reply, workspaceRecipient); setReply(""); await refreshWorkspace(selected); }
+  useEffect(() => { if (!skillsPage) void loadWorkspaces().catch((error: Error) => setNotice(error.message)); }, [skillsPage]);
+  useEffect(() => {
+    if (skillsPage || !selectedId) return;
+    setRecipient("agent"); void loadWorkspace(selectedId).catch((error: Error) => setNotice(error.message));
+    const timer = window.setInterval(() => void api.workspace(selectedId).then((snapshot) => setMessages(snapshot.messages)).catch(() => undefined), 5_000);
+    return () => window.clearInterval(timer);
+  }, [selectedId, skillsPage]);
+
+  const chooseWorkspace = (id: string) => { setSelectedId(id); setSettings(false); history.replaceState(null, "", `/admin?workspace=${encodeURIComponent(id)}`); };
+  const createWorkspace = async () => {
+    const title = prompt("Workspace name"); if (!title?.trim()) return;
+    const purpose = prompt("What should this workspace help with?"); if (!purpose?.trim()) return;
+    const workspace = await api.createAdminWorkspace(title, purpose); await loadWorkspaces(); chooseWorkspace(workspace.id);
+  };
+  const send = async (event: FormEvent) => {
+    event.preventDefault(); if (!input.trim() || !selected || busy) return;
+    const text = input; setInput(""); setBusy(true);
+    try { await api.ownerWorkspaceMessage(selected.id, text, selected.kind === "managed" ? "agent" : recipient); await loadWorkspace(selected.id); }
     catch (error) { setNotice(error instanceof Error ? error.message : "Message failed"); }
     finally { setBusy(false); }
   };
-  const toggleArchive = async () => {
-    if (!selected) return;
-    if (selected.workspaceStatus === "archived") await api.restoreWorkspace(selected.workspaceId);
-    else await api.archiveWorkspace(selected.workspaceId);
-    const next = { ...selected, workspaceStatus: selected.workspaceStatus === "archived" ? "active" as const : "archived" as const };
-    setSelected(next); await loadLeads();
+  const saveCapabilities = async (next: WorkspaceCapabilities) => {
+    setCapabilities(next);
+    try { setCapabilities(await api.saveWorkspaceCapabilities(selectedId, next)); setNotice("Workspace tools updated."); }
+    catch (error) { setNotice(error instanceof Error ? error.message : "Could not update tools"); }
   };
-  const removeWorkspace = async () => {
-    if (!selected || !confirm(`Permanently delete the workspace with ${selected.name}?`)) return;
-    await api.deleteWorkspace(selected.workspaceId); setSelected(null); setTranscript([]); await loadLeads();
+  const archive = async () => {
+    if (!selected || selected.kind !== "visitor") return;
+    if (selected.status === "archived") await api.restoreWorkspace(selected.id); else await api.archiveWorkspace(selected.id);
+    await loadWorkspaces();
   };
-  const importMedium = async () => {
-    setBusy(true);
-    try { const result = await api.importMedium(); setNotice(`${result.imported} imported · ${result.skipped} already present`); await loadContent(); }
-    catch (error) { setNotice(error instanceof Error ? error.message : "Import failed"); }
-    finally { setBusy(false); }
+  const remove = async () => {
+    if (!selected || selected.kind !== "visitor" || !confirm(`Permanently delete ${selected.title}'s workspace?`)) return;
+    await api.deleteWorkspace(selected.id); setSelectedId("owner-content"); await loadWorkspaces();
   };
 
-  const title = page === "agent" ? "Content agent" : page === "inbox" ? "Visitor workspaces" : page === "content" ? "Site content" : page === "blog" ? "Blog" : "Skill Hub";
-  return <div className="admin-shell">
-    <aside className="admin-sidebar"><a className="brand" href="/"><span className="brand-mark">OA</span><span>Admin</span></a><nav><a className={page === "agent" ? "active" : ""} href="/admin">Content agent</a><a className={page === "inbox" ? "active" : ""} href="/admin/inbox">Inbox</a><a className={page === "content" ? "active" : ""} href="/admin/content">Site content</a><a className={page === "blog" ? "active" : ""} href="/admin/blog">Blog</a><a className={page === "skills" ? "active" : ""} href="/admin/skills">Skill Hub</a></nav><a className="admin-view-site" href="/">View website ↗</a></aside>
-    <main className="admin-main"><header><div><span className="eyebrow">PORTFOLIO ADMIN</span><h1>{title}</h1></div><span className="admin-auth">Cloudflare Access</span></header>{notice && <div className="notice">{notice}</div>}
-      {page === "agent" && <section className="admin-agent admin-page-panel"><div className="admin-messages">{messages.map((message, index) => <div className={`message ${message.role}`} key={index}><span>{message.role === "assistant" ? "AGENT" : "YOU"}</span><div>{message.content}</div></div>)}{busy && <p className="muted">Working…</p>}</div><form onSubmit={send}><textarea value={input} onChange={(event) => setInput(event.target.value)} placeholder="Example: Update the Cloudflare capabilities section and show me the draft first."/><button disabled={busy}>Send</button></form></section>}
-      {page === "inbox" && <section className="admin-page-panel"><div className="admin-toolbar"><p>Only visitors who explicitly added you appear here.</p><button onClick={() => void loadLeads()}>Refresh</button></div><div className="lead-table">{leads.length === 0 ? <p className="empty">No shared workspaces.</p> : leads.map((lead) => <button className={`lead-row ${lead.workspaceStatus}`} onClick={() => void openLead(lead)} key={lead.id}><div><strong>{lead.name}</strong><span>{lead.email}</span></div><p>{lead.intent}</p><span className={`status-badge ${lead.workspaceStatus}`}>{lead.workspaceStatus}</span><time>{new Date(lead.updatedAt).toLocaleDateString()}</time></button>)}</div></section>}
-      {page === "content" && <section className="admin-page-panel"><div className="admin-toolbar"><p>{sections.length} structured sections. Use the content agent to edit or publish.</p><a href="/admin">Open content agent →</a></div><div className="resource-list">{sections.map((section) => <div key={section.id}><span className="resource-type">{section.type}</span><div><strong>{section.title}</strong><small>/{section.slug}</small></div><span className={`status-badge ${section.status}`}>{section.status}</span><span>{section.sortOrder}</span></div>)}</div></section>}
-      {page === "blog" && <section className="admin-page-panel"><div className="admin-toolbar"><p>{posts.length} articles in the local blog.</p><div><button onClick={() => void importMedium()} disabled={busy}>Import Medium</button><a href="/admin">Draft with agent →</a></div></div><div className="resource-list">{posts.map((post) => <div key={post.id}><span className="resource-type">{post.source}</span><div><strong>{post.title}</strong><small>/{post.slug}</small></div><span className={`status-badge ${post.status}`}>{post.status}</span><span>{post.publishedAt ? new Date(post.publishedAt).getFullYear() : "—"}</span></div>)}</div></section>}
-      {page === "skills" && <AdminSkills/>}
-    </main>
-    {selected && <aside className="lead-drawer"><button className="drawer-close" onClick={() => setSelected(null)}>×</button><span className="eyebrow">{selected.workspaceStatus === "archived" ? "ARCHIVED" : "SHARED WORKSPACE"}</span><h2>{selected.name}</h2><a href={`mailto:${selected.email}`}>{selected.email}</a><p>{selected.intent}</p><div className="workspace-actions"><button onClick={() => void navigator.clipboard.writeText(`${window.location.origin}/chat/${selected.workspaceId}`)}>Copy invite URL</button><button onClick={() => void toggleArchive()}>{selected.workspaceStatus === "archived" ? "Restore" : "Archive"}</button><button className="danger" onClick={() => void removeWorkspace()}>Delete</button></div><div className="drawer-transcript">{transcript.map((message) => <div className={`message ${message.sender === "visitor" ? "user" : "assistant"} ${message.sender}`} key={message.id}><span>{message.senderName}{message.audience === "owner" && message.sender === "visitor" ? " → YOU" : ""}</span><div>{message.content}</div></div>)}</div>{selected.workspaceStatus === "active" && <form className="owner-reply" onSubmit={sendReply}><div className="recipient-switch"><button type="button" className={workspaceRecipient === "visitor" ? "active" : ""} onClick={() => setWorkspaceRecipient("visitor")}><strong>Reply to visitor</strong><span>As Oskar</span></button><button type="button" className={workspaceRecipient === "agent" ? "active" : ""} onClick={() => setWorkspaceRecipient("agent")}><strong>Ask agent</strong><span>Use workspace context</span></button></div><textarea value={reply} onChange={(event) => setReply(event.target.value)} placeholder={workspaceRecipient === "visitor" ? `Reply to ${selected.name}…` : "Ask the agent about this conversation…"}/><button className="owner-send" disabled={busy || !reply.trim()}>{workspaceRecipient === "visitor" ? "Send reply" : "Ask agent"}</button></form>}</aside>}
+  const managed = workspaces.filter((workspace) => workspace.kind === "managed");
+  const visitors = workspaces.filter((workspace) => workspace.kind === "visitor");
+  return <div className="admin-shell unified-admin">
+    <aside className="admin-sidebar"><a className="brand" href="/"><span className="brand-mark">OA</span><span>Admin</span></a><nav><a className={!skillsPage ? "active" : ""} href="/admin">Workspaces</a><a className={skillsPage ? "active" : ""} href="/admin/skills">Skill Hub</a></nav><a className="admin-view-site" href="/">View website ↗</a></aside>
+    <main className="admin-main">{skillsPage ? <><header><div><span className="eyebrow">PORTFOLIO ADMIN</span><h1>Skill Hub</h1></div><span className="admin-auth">Cloudflare Access</span></header><AdminSkills/></> : <div className="workspace-console">
+      <aside className="workspace-list"><header><div><span className="eyebrow">WORKSPACES</span><strong>{workspaces.length}</strong></div><button onClick={() => void createWorkspace()}>+</button></header><div className="workspace-group"><span>Managed</span>{managed.map((workspace) => <button className={selectedId === workspace.id ? "active" : ""} onClick={() => chooseWorkspace(workspace.id)} key={workspace.id}><i>M</i><div><strong>{workspace.title}</strong><small>{workspace.purpose}</small></div></button>)}</div><div className="workspace-group"><span>Visitor collaboration</span>{visitors.length === 0 ? <p>No visitor workspaces.</p> : visitors.map((workspace) => <button className={`${selectedId === workspace.id ? "active" : ""} ${workspace.status}`} onClick={() => chooseWorkspace(workspace.id)} key={workspace.id}><i>{workspace.title.slice(0,1).toUpperCase()}</i><div><strong>{workspace.title}</strong><small>{workspace.purpose}</small></div><b/></button>)}</div></aside>
+      <section className="workspace-chat">{selected ? <><header><div><span className="eyebrow">{selected.kind === "managed" ? "MANAGED WORKSPACE" : "VISITOR WORKSPACE"}</span><h1>{selected.title}</h1><p>{selected.purpose}</p></div><div className="workspace-header-actions"><button onClick={() => setSettings(!settings)}>Tools & skills</button>{selected.kind === "visitor" && <button onClick={() => void archive()}>{selected.status === "archived" ? "Restore" : "Archive"}</button>}</div></header>{notice && <div className="notice">{notice}</div>}<div className="workspace-transcript">{messages.length === 0 && <div className="workspace-welcome"><span>&gt;_</span><h2>Start this workspace</h2><p>The agent keeps this workspace's history and uses only the tools and skills attached here.</p></div>}{messages.map((message) => <div className={`message ${message.sender === "owner" ? "user" : "assistant"} ${message.sender}`} key={message.id}><span>{message.senderName}</span><div className="message-body">{message.sender === "agent" ? <ChatResponse content={message.content}/> : <p>{message.content}</p>}</div></div>)}{busy && <div className="message assistant agent"><span>AGENT</span><div className="thinking">Working…</div></div>}</div>{selected.status === "active" && <form className="workspace-composer" onSubmit={send}>{selected.kind === "visitor" && <div className="recipient-switch"><button type="button" className={recipient === "visitor" ? "active" : ""} onClick={() => setRecipient("visitor")}><strong>Message visitor</strong><span>No agent inference</span></button><button type="button" className={recipient === "agent" ? "active" : ""} onClick={() => setRecipient("agent")}><strong>Ask workspace agent</strong><span>Use this context</span></button></div>}<div><textarea rows={2} value={input} onChange={(event) => setInput(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} placeholder={selected.kind === "visitor" && recipient === "visitor" ? `Reply to ${selected.title}…` : "Message this workspace agent…"}/><button disabled={busy || !input.trim()}>↑</button></div></form>}</> : <div className="state-message">Loading workspace…</div>}</section>
+      {settings && selected && <aside className="workspace-settings"><header><div><span className="eyebrow">WORKSPACE CONFIGURATION</span><h2>Tools & skills</h2></div><button onClick={() => setSettings(false)}>×</button></header><p>Attachments apply only to <strong>{selected.title}</strong>. Other workspaces are unchanged.</p><div className="capability-list"><label><div><strong>Web search</strong><span>Search and fetch current public pages</span></div><input type="checkbox" checked={capabilities.webSearch} onChange={(event) => void saveCapabilities({ ...capabilities, webSearch: event.target.checked })}/></label><label><div><strong>Scheduling</strong><span>Run an instruction later in this workspace</span></div><input type="checkbox" checked={capabilities.scheduling} onChange={(event) => void saveCapabilities({ ...capabilities, scheduling: event.target.checked })}/></label></div><div className="workspace-skills"><header><strong>Attached skills</strong><a href="/admin/skills">Manage definitions →</a></header>{skills.length === 0 ? <p>No skills in the Skill Hub.</p> : skills.map((skill) => <label key={skill.slug}><input type="checkbox" checked={capabilities.skillSlugs.includes(skill.slug)} onChange={(event) => void saveCapabilities({ ...capabilities, skillSlugs: event.target.checked ? [...capabilities.skillSlugs, skill.slug] : capabilities.skillSlugs.filter((slug) => slug !== skill.slug) })}/><div><strong>{skill.name}</strong><span>{skill.description}</span><small>{skill.audience}</small></div></label>)}</div>{selected.kind === "visitor" && <div className="workspace-danger"><button onClick={() => void remove()}>Delete workspace permanently</button></div>}</aside>}
+    </div>}</main>
   </div>;
 }

@@ -9,6 +9,8 @@ import {
 import { anonymousChat } from "./agent/anonymous";
 import type { BlogPost, ChatMessage, Lead, SiteSection } from "./shared/types";
 import type { SaveSkillInput } from "./skills/types";
+import { createAdminWorkspace, listAdminWorkspaces, managedWorkspace, saveWorkspaceCapabilities, workspaceCapabilities } from "./data/workspaces";
+import type { WorkspaceCapabilities } from "./shared/types";
 
 const app = new Hono<{ Bindings: Env }>();
 app.use("/api/*", cors({ origin: (origin) => origin, credentials: true }));
@@ -148,6 +150,13 @@ app.put("/api/admin/blog/:id", async (c) => {
 });
 app.post("/api/admin/blog/import-medium", async (c) => c.json(await importMediumFeed(c.env.DB, adminEmail(c.req.raw) ?? "local")));
 app.get("/api/admin/leads", async (c) => c.json({ leads: await listLeads(c.env.DB) }));
+app.get("/api/admin/workspaces", async (c) => c.json({ workspaces: await listAdminWorkspaces(c.env.DB) }));
+app.post("/api/admin/workspaces", async (c) => c.json(await createAdminWorkspace(c.env.DB, await c.req.json<{ title: string; purpose: string }>()), 201));
+app.get("/api/admin/workspaces/:id/capabilities", async (c) => c.json(await workspaceCapabilities(c.env.DB, c.req.param("id"))));
+app.put("/api/admin/workspaces/:id/capabilities", async (c) => {
+  const input = await c.req.json<WorkspaceCapabilities>();
+  return c.json(await saveWorkspaceCapabilities(c.env.DB, c.req.param("id"), { webSearch: input.webSearch === true, scheduling: input.scheduling === true, skillSlugs: Array.isArray(input.skillSlugs) ? input.skillSlugs.filter((slug): slug is string => typeof slug === "string") : [] }));
+});
 app.patch("/api/admin/leads/:id", async (c) => {
   const input = await c.req.json<{ status?: Lead["status"] }>();
   if (!input.status || !["new", "reviewing", "scheduled", "closed"].includes(input.status)) return c.json({ error: "Invalid status" }, 400);
@@ -156,6 +165,8 @@ app.patch("/api/admin/leads/:id", async (c) => {
 });
 app.get("/api/admin/workspaces/:id", async (c) => {
   const workspaceId = c.req.param("id");
+  const managed = await managedWorkspace(c.env.DB, workspaceId);
+  if (managed) return c.json({ workspaceId, status: managed.status, participants: [{ type: "owner", name: "Oskar Ablimit", email: adminEmail(c.req.raw) }, { type: "agent", name: "Portfolio Agent", email: null }], messages: await c.env.PORTFOLIO_SESSION.getByName(workspaceId).history(true) });
   const lead = await workspaceRecord(c.env.DB, workspaceId);
   if (!lead) return c.json({ error: "Workspace not found" }, 404);
   return c.json({ workspaceId, status: lead.workspaceStatus, participants: await workspaceParticipants(c.env.DB, workspaceId), messages: await c.env.PORTFOLIO_SESSION.getByName(workspaceId).history() });
@@ -165,10 +176,16 @@ app.post("/api/admin/workspaces/:id/messages", async (c) => {
   if (!input.message?.trim()) return c.json({ error: "message is required" }, 400);
   if (input.recipient !== "visitor" && input.recipient !== "agent") return c.json({ error: "recipient must be visitor or agent" }, 400);
   const workspaceId = c.req.param("id");
+  const managed = await managedWorkspace(c.env.DB, workspaceId);
+  const stub = c.env.PORTFOLIO_SESSION.getByName(workspaceId);
+  if (managed) {
+    if (managed.status === "archived") return c.json({ error: "Restore the workspace before messaging" }, 409);
+    if (input.recipient !== "agent") return c.json({ error: "Managed workspaces message the agent" }, 400);
+    return c.json({ delivered: true, recipient: "agent", ...await stub.chat(input.message, input.requestId ?? crypto.randomUUID(), true, "Oskar Ablimit", "owner") });
+  }
   const lead = await workspaceRecord(c.env.DB, workspaceId);
   if (!lead) return c.json({ error: "Workspace not found" }, 404);
   if (lead.workspaceStatus === "archived") return c.json({ error: "Restore the workspace before replying" }, 409);
-  const stub = c.env.PORTFOLIO_SESSION.getByName(workspaceId);
   if (input.recipient === "visitor") {
     await stub.sendHumanMessage(input.message, "owner", "Oskar Ablimit");
     return c.json({ delivered: true, recipient: "visitor" });

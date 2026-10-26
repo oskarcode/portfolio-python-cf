@@ -9,7 +9,9 @@ A Cloudflare-native portfolio for Oskar Ablimit with a professional website, an 
 - **Workers AI (`@cf/zai-org/glm-5.2`) + AI Gateway** — conversational inference
 - **Pi Durable + Durable Object SQLite** — persistent opt-in and owner workspaces
 - **Cloudflare Computer + Worker Loader** — durable, Git-versioned skill files and isolated Worker Shell commands
-- **D1** — sections, blog posts, leads, and revisions
+- **Pi Durable tasks + Durable Object alarms** — workspace-local scheduled agent instructions
+- **Workers AI web search/fetch tools** — optional current-web research attached per workspace
+- **D1** — sections, blog posts, leads, revisions, managed workspaces, and capability attachments
 - **R2** — media binding for future uploads
 - **Cloudflare Access** — required for production `/api/admin/*` requests
 
@@ -23,9 +25,7 @@ Anonymous messages are held only in React state and sent as bounded context to a
 | `/chat` | Ephemeral conversational portfolio |
 | `/chat/:workspaceId` | Consented persistent visitor/Oskar/agent workspace |
 | `/blog` and `/blog/:slug` | Local writing |
-| `/admin` | Private content agent |
-| `/admin/inbox` | Visitor workspace inbox |
-| `/admin/content` and `/admin/blog` | Content catalogs |
+| `/admin` | Unified admin chat with managed and visitor workspaces |
 | `/admin/skills` | Cloudflare Computer Skill Hub |
 | `/api/*` | Hono APIs |
 
@@ -75,6 +75,10 @@ The owner agent receives content mutation tools only in the fixed private `owner
 
 ## Skill Hub and Computer permissions
 
-`/admin/skills` is Access-protected and lets Oskar create, edit, enable, scope, test, and delete reusable skills. A skill can target **Visitor durable chat**, **Content agent**, or **Both agents**. Skills are stored under `/workspace/skills/<slug>` in one deployment-global Cloudflare Computer workspace; changes are committed to its internal Git repository.
+`/admin/skills` is Access-protected and lets Oskar create, edit, enable, scope, test, and delete reusable skill definitions. A skill can be eligible for **Visitor durable chat**, **Content agent**, or **Both agents**. Skills are stored under `/workspace/skills/<slug>` in one deployment-global Cloudflare Computer workspace; changes are committed to its internal Git repository.
 
-Both Pi Durable agents can discover and activate enabled skills in their scope, read supporting files, and execute the bundled Worker Shell commands (`curl`, file tools, HTML-to-Markdown, JavaScript, and `jq`) inside that skill directory. Only the private content agent and Access-protected admin can author skills or supporting files. Visitor agents are deterministically denied the skill-writing tools and are instructed to reject arbitrary visitor-supplied commands.
+Skill availability is not global. The admin opens **Tools & skills** in a workspace and explicitly attaches skill definitions, web search, or scheduling to that workspace. The Pi Durable session reads these attachments on every turn. A tool or skill added to one workspace is unavailable in every other workspace until separately attached.
+
+Attached skills can read supporting files and execute the bundled Worker Shell commands (`curl`, file tools, HTML-to-Markdown, JavaScript, and `jq`) inside their own skill directory. Only managed agents and the Access-protected admin can author skills or supporting files. Visitor agents are deterministically denied skill-writing tools and arbitrary visitor-supplied commands.
+
+The admin interface has two surfaces: one unified chat with a workspace switcher, and the Skill Hub. **Portfolio management** is the initial managed workspace. Additional managed workspaces can be created for other jobs. Visitor workspaces appear automatically when a visitor consents and adds Oskar. Each workspace keeps an independent Pi Durable transcript and independent tool attachments.

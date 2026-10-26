@@ -1,4 +1,4 @@
-import type { BlogPost, ChatMessage, Lead, SiteSection, WorkspaceSnapshot } from "../shared/types";
+import type { AdminWorkspaceSummary, BlogPost, ChatMessage, Lead, SiteSection, WorkspaceCapabilities, WorkspaceSnapshot } from "../shared/types";
 import type { ComputerFileEntry, SaveSkillInput, SkillRecord, SkillSummary } from "../skills/types";
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
@@ -30,6 +30,10 @@ export const api = {
   computerFile: (path: string) => request<{ path: string; content: string }>(`/api/admin/computer/file?path=${encodeURIComponent(path)}`),
   runSkillCommand: (slug: string, command: string) => request<{ exitCode: number; stdout: string; stderr: string; status: string }>(`/api/admin/skills/${encodeURIComponent(slug)}/command`, { method: "POST", body: JSON.stringify({ command }) }),
   leads: () => request<{ leads: Lead[] }>("/api/admin/leads"),
+  adminWorkspaces: () => request<{ workspaces: AdminWorkspaceSummary[] }>("/api/admin/workspaces"),
+  createAdminWorkspace: (title: string, purpose: string) => request<AdminWorkspaceSummary>("/api/admin/workspaces", { method: "POST", body: JSON.stringify({ title, purpose }) }),
+  workspaceCapabilities: (id: string) => request<WorkspaceCapabilities>(`/api/admin/workspaces/${id}/capabilities`),
+  saveWorkspaceCapabilities: (id: string, capabilities: WorkspaceCapabilities) => request<WorkspaceCapabilities>(`/api/admin/workspaces/${id}/capabilities`, { method: "PUT", body: JSON.stringify(capabilities) }),
   workspace: (id: string) => request<WorkspaceSnapshot>(`/api/admin/workspaces/${id}`),
   ownerWorkspaceMessage: (id: string, message: string, recipient: "visitor" | "agent") =>
     request<{ delivered: boolean; recipient: "visitor" | "agent"; answer?: string }>(`/api/admin/workspaces/${id}/messages`, {
