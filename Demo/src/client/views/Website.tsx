@@ -15,6 +15,9 @@ type Item = {
   summary?: string;
   tags?: string[];
   url?: string;
+  classNumber?: number;
+  content?: string;
+  project?: string;
 };
 
 type Link = { label?: string; href?: string };
@@ -26,7 +29,7 @@ type ContentBlock =
   | { type: "focus"; areas: FocusArea[] }
   | { type: "projects"; projects: Item[] }
   | { type: "timeline"; roles: Item[] }
-  | { type: "teaching"; body: string; topics: string[]; link: string }
+  | { type: "teaching"; school: string; audience: string; course: string; body: string; outcomes: string[]; syllabus: Item[]; feedbackSummary: string; feedbackHighlights: string[]; feedbackImprovements: string[]; links: Link[] }
   | { type: "writing"; posts: BlogPost[] }
   | { type: "consulting"; intro: string; services: Item[]; packages: Item[]; payments: string[]; reasons: Item[]; bookingUrl: string }
   | { type: "contact"; links: Link[]; bookingUrl: string };
@@ -147,7 +150,19 @@ function buildModules(sections: SiteSection[], posts: BlogPost[]): Record<Module
     .developTechSalesSkills()
     .moveIntoTechnology();
 }`,
-      blocks: [{ type: "teaching", body: string(teaching?.content.body), topics: strings(teaching?.content.topics), link: string(teaching?.content.link) }],
+      blocks: [{
+        type: "teaching",
+        school: string(teaching?.content.school),
+        audience: string(teaching?.content.audience),
+        course: string(teaching?.content.course),
+        body: string(teaching?.content.body),
+        outcomes: strings(teaching?.content.outcomes),
+        syllabus: items(teaching, "syllabus"),
+        feedbackSummary: string(teaching?.content.feedbackSummary),
+        feedbackHighlights: strings(teaching?.content.feedbackHighlights),
+        feedbackImprovements: strings(teaching?.content.feedbackImprovements),
+        links: Array.isArray(teaching?.content.links) ? teaching.content.links as Link[] : [],
+      }],
     },
     writing: {
       id: "writing", file: "writing.ts", path: "src/writing.ts", language: "ts", kicker: "TECHNICAL EXPLANATIONS",
@@ -216,7 +231,7 @@ function BlockRenderer({ block }: { block: ContentBlock }) {
     case "focus": return <FocusBlock areas={block.areas}/>;
     case "projects": return <div className="cp-projects">{block.projects.map((project, index) => <a href={project.url} target="_blank" rel="noreferrer" key={project.id ?? project.title}><header><span>{String(index + 1).padStart(2, "0")}</span><b>↗</b></header><h2>{project.title}</h2><p>{project.summary}</p><div>{project.tags?.map((tag) => <span key={tag}>{tag}</span>)}</div></a>)}</div>;
     case "timeline": return <div className="cp-timeline">{block.roles.map((role) => <article key={`${role.company}-${role.title}`}><time>{role.period}</time><div><h2>{role.title}</h2><strong>{role.company}</strong><small>{role.location}</small><p>{role.body}</p></div></article>)}</div>;
-    case "teaching": return <div className="cp-teaching"><p>{block.body}</p><div>{block.topics.map((topic) => <span key={topic}>{topic}</span>)}</div>{block.link && <a href={block.link} target="_blank" rel="noreferrer">View teaching repository ↗</a>}</div>;
+    case "teaching": return <div className="cp-teaching"><div className="cp-teaching-context"><article><span>WHERE</span><strong>{block.school}</strong><small>{block.course}</small></article><article><span>WHO</span><strong>{block.audience}</strong><small>Graduate cloud computing</small></article></div><p className="cp-teaching-overview">{block.body}</p><section><span>LEARNING OUTCOMES</span><h2>What students leave able to do</h2><div className="cp-outcomes">{block.outcomes.map((outcome) => <p key={outcome}>✓ {outcome}</p>)}</div></section><section><span>COURSE SYLLABUS</span><h2>Concepts paired with implementation</h2><div className="cp-syllabus">{block.syllabus.map((lesson) => <article key={lesson.classNumber ?? lesson.title}><b>{String(lesson.classNumber ?? "").padStart(2, "0")}</b><div><h3>{lesson.title}</h3><p>{lesson.content}</p><small>{lesson.project && lesson.project !== "N/A" ? `Project: ${lesson.project}` : "Concept session"}</small></div></article>)}</div></section><section><span>STUDENT FEEDBACK</span><h2>What students reported</h2><p className="cp-feedback-summary">{block.feedbackSummary}</p><div className="cp-feedback-grid"><article><strong>Highlights</strong>{block.feedbackHighlights.map((item) => <p key={item}>✓ {item}</p>)}</article><article><strong>Opportunities to improve</strong>{block.feedbackImprovements.map((item) => <p key={item}>→ {item}</p>)}</article></div></section><div className="cp-teaching-links">{block.links.map((link) => <a href={link.href} target="_blank" rel="noreferrer" key={link.label}>{link.label} ↗</a>)}</div></div>;
     case "writing": return <div className="cp-writing">{block.posts.map((post, index) => <a href={`/blog/${post.slug}`} key={post.id}><span>{String(index + 1).padStart(2, "0")}</span><div><small>{post.tags.slice(0, 2).join(" · ")}</small><h2>{post.title}</h2><p>{post.excerpt}</p></div><b>Read →</b></a>)}</div>;
     case "consulting": return <div className="cp-consulting"><p className="cp-consulting-intro">{block.intro}</p><section><span>SERVICES</span><h2>Ways I can help</h2><div className="cp-consulting-grid">{block.services.map((service) => <article key={service.title}><h3>{service.title}</h3><p>{service.body}</p></article>)}</div></section><section><span>PRICING + PACKAGES</span><h2>Choose the right engagement</h2><div className="cp-consulting-packages">{block.packages.map((item) => <article key={item.title}><h3>{item.title}</h3><strong>{item.summary}</strong><p>{item.body}</p>{item.tags?.map((tag) => <small key={tag}>✓ {tag}</small>)}</article>)}</div>{block.payments.length > 0 && <p className="cp-payments"><strong>Payment options</strong>{block.payments.join(" · ")}</p>}</section><section><span>WHY WORK WITH ME</span><h2>Experience across roles, regions, and classrooms</h2><div className="cp-consulting-reasons">{block.reasons.map((reason) => <article key={reason.title}><h3>{reason.title}</h3><p>{reason.body}</p></article>)}</div></section>{block.bookingUrl && <a className="cp-consulting-cta" href={block.bookingUrl} target="_blank" rel="noreferrer">Book a consultation ↗</a>}</div>;
     case "contact": return <div className="cp-contact"><a href="/chat">Start a private conversation</a>{block.bookingUrl && <a className="secondary" href={block.bookingUrl} target="_blank" rel="noreferrer">Schedule a conversation</a>}{block.links.map((link) => <a className="text" href={link.href} target="_blank" rel="noreferrer" key={link.label}>{link.label} ↗</a>)}</div>;
