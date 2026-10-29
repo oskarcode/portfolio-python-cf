@@ -10,7 +10,15 @@ type DisplayMessage = ChatMessage & {
   audience?: WorkspaceMessage["audience"];
 };
 
-const suggestions = ["What does Oskar build?", "Can he help with Cloudflare architecture?", "Show me relevant projects", "I want to work with Oskar"];
+const suggestions = [
+  "Give me a quick overview of Oskar’s profile.",
+  "What are Oskar’s main areas of expertise?",
+  "How can Oskar help through consulting?",
+  "Recommend a technical article from Oskar’s blog.",
+  "Show me Oskar’s most relevant agentic AI projects.",
+  "Tell me about Oskar’s graduate cloud computing course.",
+  "I want to add Oskar and start a persistent conversation.",
+];
 const displayWorkspace = (message: WorkspaceMessage): DisplayMessage => ({
   role: message.sender === "visitor" ? "user" : "assistant",
   content: message.content,
@@ -29,13 +37,14 @@ const displayWorkspace = (message: WorkspaceMessage): DisplayMessage => ({
  */
 export function Chat() {
   const initialWorkspace = window.location.pathname.match(/^\/chat\/([^/]+)/)?.[1] ?? null;
+  const starterPrompt = new URLSearchParams(window.location.search).get("prompt")?.slice(0, 400) ?? "";
   const [messages, setMessages] = useState<DisplayMessage[]>([{
     role: "assistant", sender: "agent", senderName: "Portfolio Agent",
-    content: "Hi — tell me what you’re trying to learn, build, or solve. I’ll point you to the most relevant parts of Oskar’s work.",
+    content: "Hi — ask about Oskar’s profile, expertise, projects, teaching, writing, or consulting. This chat is anonymous and clears on refresh unless you explicitly choose Add Oskar.",
   }]);
   const [workspaceId, setWorkspaceId] = useState<string | null>(initialWorkspace);
   const [recipient, setRecipient] = useState<"owner" | "agent">("owner");
-  const [input, setInput] = useState("");
+  const [input, setInput] = useState(starterPrompt);
   const [busy, setBusy] = useState(false);
   const [handoff, setHandoff] = useState(false);
   const [contact, setContact] = useState({ name: "", email: "", company: "", intent: "" });
@@ -97,8 +106,8 @@ export function Chat() {
   };
 
   return <div className="chat-shell">
-    <header className="chat-header"><a className="brand" href="/"><span className="brand-mark">OA</span><span>Oskar Ablimit</span></a><div className="chat-status"><span className="status-dot"/>{workspaceId ? "Oskar + Agent · Persistent" : "Private · Clears on refresh"}</div><a href="/" className="close-chat">Website view ×</a></header>
-    <div className="chat-main"><aside className="chat-intro"><span className="eyebrow">CONVERSATIONAL PORTFOLIO</span><h1>What can I help you find?</h1><p>Ask about capabilities, projects, writing, teaching, or ways to work together.</p><div className="privacy-note"><strong>{workspaceId ? "Shared workspace" : "Private by default"}</strong><p>{workspaceId ? "Use the two recipient buttons to message Oskar directly or ask the agent. Anyone with this private link can return to the workspace." : "This conversation lives only in this page and disappears when you refresh."}</p></div></aside>
+    <header className="chat-header"><a className="brand" href="/"><span className="brand-mark">OA</span><span>Oskar Ablimit</span></a><div className="chat-status"><span className="status-dot"/>{workspaceId ? "Oskar + Agent · Persistent" : "Anonymous · Clears on refresh"}</div><a href="/" className="close-chat">Website view ×</a></header>
+    <div className="chat-main"><aside className="chat-intro"><span className="eyebrow">CONVERSATIONAL PORTFOLIO</span><h1>What would you like to explore?</h1><p>The agent can use Oskar’s published portfolio and article catalog. It has no access to private information or workspace tools in anonymous mode.</p><div className="privacy-note"><strong>{workspaceId ? "Shared workspace" : "Private by default"}</strong><p>{workspaceId ? "Use the two recipient buttons to message Oskar directly or ask the agent. Anyone with this private link can return to the workspace." : "This conversation stays in browser memory and disappears when you refresh. Nothing is shared with Oskar unless you explicitly add him and consent."}</p></div></aside>
       <section className="conversation" aria-live="polite"><div className="messages">{messages.map((message, index) => {
           const isAgent = message.role === "assistant" && (message.sender === "agent" || !message.sender);
           const actions = isAgent && index === messages.length - 1 ? responseActions(message.content, Boolean(workspaceId)) : [];

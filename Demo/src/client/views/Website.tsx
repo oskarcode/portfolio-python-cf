@@ -21,10 +21,11 @@ type Item = {
 };
 
 type Link = { label?: string; href?: string };
-type ModuleId = "profile" | "expertise" | "work" | "experience" | "teaching" | "writing" | "consulting" | "contact";
+type ModuleId = "chat" | "profile" | "expertise" | "work" | "experience" | "teaching" | "writing" | "consulting" | "contact";
 type ExpertiseId = "cloud" | "cybersecurity" | "infrastructure" | "networking" | "agentic-ai" | "agent-harness" | "technical-teaching" | "b2b-technical-sales";
 
 type ContentBlock =
+  | { type: "chat-guide" }
   | { type: "profile"; achievements: string[]; education: Item[] }
   | { type: "expertise"; areas: ExpertiseArea[] }
   | { type: "projects"; projects: Item[] }
@@ -53,7 +54,16 @@ type ExpertiseArea = {
   evidence: string[];
 };
 
-const MODULE_ORDER: ModuleId[] = ["profile", "expertise", "work", "experience", "teaching", "writing", "consulting", "contact"];
+const MODULE_ORDER: ModuleId[] = ["chat", "profile", "expertise", "work", "experience", "teaching", "writing", "consulting", "contact"];
+const CHAT_STARTERS = [
+  "Give me a quick overview of Oskar’s profile.",
+  "What are Oskar’s main areas of expertise?",
+  "How can Oskar help through consulting?",
+  "Recommend a technical article from Oskar’s blog.",
+  "Show me Oskar’s most relevant agentic AI projects.",
+  "Tell me about Oskar’s graduate cloud computing course.",
+  "I want to add Oskar and start a persistent conversation.",
+];
 const string = (value: unknown) => typeof value === "string" ? value : "";
 const strings = (value: unknown) => Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
 const items = (section: SiteSection | undefined, key = "items") => section && Array.isArray(section.content[key]) ? section.content[key] as Item[] : [];
@@ -90,6 +100,17 @@ function buildModules(sections: SiteSection[], posts: BlogPost[]): Record<Module
   const links = Array.isArray(contact?.content.links) ? contact.content.links as Link[] : [];
 
   return {
+    chat: {
+      id: "chat", file: "chat.ts", path: "src/chat.ts", language: "ts", kicker: "START HERE",
+      title: "Start with the portfolio chat",
+      summary: "Ask about Oskar’s profile, expertise, projects, teaching, writing, or consulting. Stay anonymous for quick research, or explicitly create a persistent workspace when you want Oskar involved.",
+      code: `export const portfolioChat = {
+  anonymous: { stored: false, access: ["public portfolio", "published writing"] },
+  persistent: { consent: true, participants: ["you", "Oskar", "workspace agent"] },
+  tools: "workspace-scoped only",
+};`,
+      blocks: [{ type: "chat-guide" }],
+    },
     profile: {
       id: "profile", file: "profile.ts", path: "src/profile.ts", language: "ts", kicker: "CANONICAL PROFILE",
       title: "Senior Customer Engineer at Cloudflare",
@@ -227,6 +248,7 @@ function ExpertiseBlock({ areas }: { areas: ExpertiseArea[] }) {
 
 function BlockRenderer({ block }: { block: ContentBlock }) {
   switch (block.type) {
+    case "chat-guide": return <div className="cp-chat-guide"><section className="cp-chat-can"><span>WHAT IT CAN DO</span><h2>A guide to the public portfolio</h2><div><article><strong>Find the right context</strong><p>Ask about Oskar’s profile, main expertise, professional experience, projects, teaching, consulting, or published articles.</p></article><article><strong>Compare and recommend</strong><p>Describe what you need and the agent can connect it to relevant experience, work, writing, or a practical next step.</p></article><article><strong>Bring Oskar in</strong><p>When you explicitly choose Add Oskar, the chat asks for consent and creates a private, persistent collaboration workspace.</p></article></div></section><section className="cp-chat-modes"><span>CHOOSE A MODE</span><h2>Anonymous first. Persistent only by choice.</h2><div><article><header><b>01</b><strong>Anonymous chat</strong><small>Default</small></header><p>Use it immediately without an account. The model receives the published portfolio and article catalog as context.</p><ul><li>Conversation stays in this browser page</li><li>Nothing is saved as a visitor workspace</li><li>It disappears when you refresh or leave</li><li>It cannot message Oskar directly</li><li>No private data, arbitrary commands, or ambient tools</li></ul></article><article><header><b>02</b><strong>Persistent workspace</strong><small>Explicit consent</small></header><p>Choose Add Oskar, provide your contact details and intent, and consent to import the current transcript.</p><ul><li>Transcript is stored in a Pi Durable workspace</li><li>Return through the private, opaque workspace URL</li><li>Choose Message Oskar for direct human delivery</li><li>Choose Ask the agent for an immediate model response</li><li>Tools and skills work only when Oskar attaches them to this workspace</li></ul></article></div></section><section className="cp-chat-steps"><span>QUICK START</span><h2>Four steps</h2><ol><li><b>1</b><div><strong>Open the chat</strong><p>No sign-in is required for anonymous questions.</p></div></li><li><b>2</b><div><strong>Pick a starter or write your own question</strong><p>Share enough context for a useful, grounded answer.</p></div></li><li><b>3</b><div><strong>Stay anonymous or add Oskar</strong><p>Persistence begins only after you choose it and provide consent.</p></div></li><li><b>4</b><div><strong>Keep the private link</strong><p>In a workspace, select Oskar or the agent before each message. Anyone with the link can access the conversation, so treat it as private.</p></div></li></ol></section><section className="cp-chat-starters"><span>TRY A STARTER</span><h2>Choose what you want to learn</h2><div>{CHAT_STARTERS.map((prompt) => <a href={`/chat?prompt=${encodeURIComponent(prompt)}`} key={prompt}><span>{prompt}</span><b>→</b></a>)}</div></section><div className="cp-chat-actions"><a href="/chat">Open anonymous chat</a><small>No account · clears on refresh · persistence requires consent</small></div></div>;
     case "profile": return <div className="cp-profile"><section><h2>Professional achievements</h2>{block.achievements.map((item) => <p key={item}>✓ {item}</p>)}</section><section><h2>Education</h2>{block.education.map((item) => <div key={item.title}><strong>{item.title}</strong><span>{item.company ?? item.institution}</span><small>{item.period}</small></div>)}</section></div>;
     case "expertise": return <ExpertiseBlock areas={block.areas}/>;
     case "projects": return <div className="cp-projects">{block.projects.map((project, index) => <a href={project.url} target="_blank" rel="noreferrer" key={project.id ?? project.title}><header><span>{String(index + 1).padStart(2, "0")}</span><b>↗</b></header><h2>{project.title}</h2><p>{project.summary}</p><div>{project.tags?.map((tag) => <span key={tag}>{tag}</span>)}</div></a>)}</div>;
@@ -254,7 +276,7 @@ function CommandPalette({ modules, onClose, onOpen }: { modules: Record<ModuleId
 export function Website() {
   const initial = window.location.hash.slice(1);
   const initialModule = initial === "focus" ? "expertise" : initial;
-  const [activeId, setActiveId] = useState<ModuleId>(isModuleId(initialModule) ? initialModule : "profile");
+  const [activeId, setActiveId] = useState<ModuleId>(isModuleId(initialModule) ? initialModule : "chat");
   const [sections, setSections] = useState<SiteSection[]>([]);
   const [posts, setPosts] = useState<BlogPost[]>([]);
   const [srcOpen, setSrcOpen] = useState(true);

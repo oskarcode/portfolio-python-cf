@@ -15,6 +15,7 @@ export function Layout({ children }: { children: ReactNode }) {
     <header className="site-header">
       <a className="brand" href="/"><span className="brand-mark">OA</span><span><strong>Oskar Ablimit</strong><small>Senior Customer Engineer</small></span></a>
       <nav aria-label="Main navigation">
+        <a href="/#chat">Chat guide</a>
         <a href="/#profile">Profile</a>
         <a href="/#expertise">Main expertise</a>
         <a href="/#work">Selected work</a>
@@ -23,7 +24,7 @@ export function Layout({ children }: { children: ReactNode }) {
         <a href="/#consulting">Consulting</a>
       </nav>
       <a className={`header-blog-link ${path.startsWith("/blog") ? "active" : ""}`} href="/blog">Blog</a>
-      <a className="chat-link" href="/chat">Chat <span>↗</span></a>
+      <a className="chat-link" href="/chat">Open chat <span>↗</span></a>
     </header>
     <main>{children}</main>
     <footer><div><strong>Oskar Ablimit</strong><p>Cloud · Security · AI · Solutions Engineering</p></div><div className="footer-links"><a href="https://www.linkedin.com/in/cloudflareoskar/">LinkedIn</a><a href="https://github.com/oskarcode">GitHub</a><a href="/blog">Technical writing</a><a href="/chat">Chat</a></div></footer>
