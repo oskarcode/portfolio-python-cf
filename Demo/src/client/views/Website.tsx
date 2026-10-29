@@ -21,16 +21,6 @@ type Link = { label?: string; href?: string };
 type ModuleId = "profile" | "focus" | "work" | "experience" | "teaching" | "writing" | "consulting" | "contact";
 type FocusId = "cloud" | "cybersecurity" | "infrastructure" | "networking" | "agentic-ai" | "agent-harness" | "technical-teaching" | "b2b-technical-sales";
 
-type InspectorData = {
-  status: string;
-  type: string;
-  domains?: string[];
-  bindings?: string[];
-  regions?: string[];
-  evidence?: string[];
-  related?: ModuleId[];
-};
-
 type ContentBlock =
   | { type: "profile"; achievements: string[]; education: Item[] }
   | { type: "focus"; areas: FocusArea[] }
@@ -51,7 +41,6 @@ type PortfolioModule = {
   summary: string;
   code: string;
   blocks: ContentBlock[];
-  inspector: InspectorData;
 };
 
 type FocusArea = {
@@ -111,7 +100,6 @@ function buildModules(sections: SiteSection[], posts: BlogPost[]): Record<Module
   recognition: ["top 10% performer", "AI Wizard"],
 };`,
       blocks: [{ type: "profile", achievements: ["Top-10% enterprise performer", "$1M+ quota achievement", "Cloudflare-recognized AI Wizard", "Experience across APAC, EMEA, and North America", ...certifications.slice(0, 3)], education }],
-      inspector: { status: "current", type: "CustomerEngineer", domains: ["Cloud security", "Agentic AI", "Infrastructure", "Networking"], regions: ["APAC", "EMEA", "North America"], evidence: ["AWS", "Alibaba Cloud", "Tencent Cloud", "Cloudflare"], related: ["experience", "teaching"] },
     },
     focus: {
       id: "focus", file: "focus.ts", path: "src/focus.ts", language: "ts", kicker: "TECHNICAL FOCUS",
@@ -128,7 +116,6 @@ function buildModules(sections: SiteSection[], posts: BlogPost[]): Record<Module
   b2bTechnicalSales,
 ];`,
       blocks: [{ type: "focus", areas: focus }],
-      inspector: { status: "active", type: "FocusArea[]", domains: focus.map((area) => area.title), related: ["work", "teaching", "consulting"] },
     },
     work: {
       id: "work", file: "selected-work.ts", path: "src/selected-work.ts", language: "ts", kicker: "WORKING EVIDENCE",
@@ -138,7 +125,6 @@ function buildModules(sections: SiteSection[], posts: BlogPost[]): Record<Module
   ({ outcome }) => outcome.isDemonstrated
 );`,
       blocks: [{ type: "projects", projects }],
-      inspector: { status: "published", type: "Project[]", domains: ["Cloud", "Security", "Agentic AI", "Education"], evidence: [`${projects.length} demonstrated projects`], related: ["focus", "consulting"] },
     },
     experience: {
       id: "experience", file: "experience.ts", path: "src/experience.ts", language: "ts", kicker: "EXECUTION HISTORY",
@@ -151,7 +137,6 @@ function buildModules(sections: SiteSection[], posts: BlogPost[]): Record<Module
   aws,
 ];`,
       blocks: [{ type: "timeline", roles }],
-      inspector: { status: "verified", type: "Experience[]", regions: ["APAC", "EMEA", "North America"], evidence: ["Cloudflare", "Tencent Cloud", "Alibaba Cloud", "AWS"], related: ["profile", "teaching"] },
     },
     teaching: {
       id: "teaching", file: "teaching.ts", path: "src/teaching.ts", language: "ts", kicker: "TEACHING + MENTORSHIP",
@@ -165,7 +150,6 @@ function buildModules(sections: SiteSection[], posts: BlogPost[]): Record<Module
     .moveIntoTechnology();
 }`,
       blocks: [{ type: "teaching", body: string(teaching?.content.body), topics: strings(teaching?.content.topics), link: string(teaching?.content.link) }],
-      inspector: { status: "active", type: "Teaching + Mentorship", domains: ["Cloud computing", "AWS", "Career transition", "Technical sales"], evidence: ["Yeshiva University", "Graduate instruction", "Career mentorship"], related: ["profile", "experience"] },
     },
     writing: {
       id: "writing", file: "writing.ts", path: "src/writing.ts", language: "ts", kicker: "TECHNICAL EXPLANATIONS",
@@ -176,7 +160,6 @@ function buildModules(sections: SiteSection[], posts: BlogPost[]): Record<Module
   limit: 6,
 });`,
       blocks: [{ type: "writing", posts: posts.slice(0, 6) }],
-      inspector: { status: "published", type: "Article[]", domains: ["Cloud", "Security", "AI", "Architecture"], evidence: [`${posts.length} published articles`], related: ["focus", "teaching"] },
     },
     consulting: {
       id: "consulting", file: "consulting.ts", path: "src/consulting.ts", language: "ts", kicker: "CONSULTING SERVICES",
@@ -196,7 +179,6 @@ function buildModules(sections: SiteSection[], posts: BlogPost[]): Record<Module
         reasons: items(consulting, "reasons"),
         bookingUrl: string(consulting?.content.bookingUrl) || string(service?.content.bookingUrl),
       }],
-      inspector: { status: "available", type: "ConsultingService[]", domains: ["Tech careers", "Solutions engineering", "B2B technical sales", "Global expansion", "Technical training"], regions: ["APAC", "EMEA", "North America"], evidence: ["9+ years", "Top-10% performance", "$1M+ quota", "Adjunct Professor"], related: ["profile", "focus", "teaching", "contact"] },
     },
     contact: {
       id: "contact", file: "contact.ts", path: "src/contact.ts", language: "ts", kicker: "NEXT STEP",
@@ -207,7 +189,6 @@ function buildModules(sections: SiteSection[], posts: BlogPost[]): Record<Module
   return startPrivateConversation(context);
 }`,
       blocks: [{ type: "contact", links, bookingUrl: string(service?.content.bookingUrl) }],
-      inspector: { status: "available", type: "Conversation", domains: ["Architecture", "Cloudflare", "AI agents", "Mentorship"], related: ["profile", "consulting", "work"] },
     },
   };
 }
@@ -246,11 +227,6 @@ function BlockRenderer({ block }: { block: ContentBlock }) {
 
 function ModuleDocument({ module }: { module: PortfolioModule }) {
   return <article className="cp-document"><span className="cp-kicker">{module.kicker}</span><h1>{module.title}</h1><p className="cp-lead">{module.summary}</p><CodeBlock code={module.code}/>{module.blocks.map((block, index) => <BlockRenderer block={block} key={`${block.type}-${index}`}/>)}</article>;
-}
-
-function Inspector({ module, compact = false, onOpen }: { module: PortfolioModule; compact?: boolean; onOpen: (id: ModuleId) => void }) {
-  const groups: Array<[string, string[] | undefined]> = [["Domains", module.inspector.domains], ["Bindings", module.inspector.bindings], ["Regions", module.inspector.regions], ["Evidence", module.inspector.evidence]];
-  return <aside className={`cp-inspector ${compact ? "compact" : ""}`}><header><strong>MODULE INSPECTOR</strong><span>•••</span></header><section><small>STATUS</small><p className="cp-status"><i/> {module.inspector.status}</p></section><section><small>TYPE</small><code>{module.inspector.type}</code></section>{groups.filter(([, values]) => values?.length).map(([label, values]) => <section key={label}><small>{label.toUpperCase()}</small><div className="cp-chips">{values?.map((value) => <span key={value}>{value}</span>)}</div></section>)}{module.inspector.related?.length && <section><small>RELATED FILES</small><div className="cp-related">{module.inspector.related.map((id) => <button type="button" onClick={() => onOpen(id)} key={id}>{id === "work" ? "selected-work" : id}.ts <span>→</span></button>)}</div></section>}</aside>;
 }
 
 function CommandPalette({ modules, onClose, onOpen }: { modules: Record<ModuleId, PortfolioModule>; onClose: () => void; onOpen: (id: ModuleId) => void }) {
@@ -297,7 +273,6 @@ export function Website() {
     <div className="cp-deploybar"><div><span className="cp-cf-mark">CF</span><strong>portfolio-worker</strong><small>production</small></div><div><span><i/> DEPLOYED</span><span>D1 ●</span><span>AI ●</span><span>DO ●</span></div><button type="button" onClick={() => setPaletteOpen(true)}>⌘K Search</button></div>
     <button type="button" className="cp-mobile-explorer" onClick={() => setMobileExplorer((open) => !open)} aria-expanded={mobileExplorer}>☰ Explorer</button>
     <aside className={`cp-explorer ${mobileExplorer ? "open" : ""}`}><header><strong>FILES</strong><span>src/</span></header><Explorer modules={modules} active={activeId} srcOpen={srcOpen} onToggle={() => setSrcOpen((open) => !open)} onOpen={openModule}/><footer><span>main*</span><span>● online</span></footer></aside>
-    <main className="cp-editor"><div className="cp-tab"><FileIcon/><span>{active.file}</span><b>×</b></div><div className="cp-breadcrumb">{active.path.split("/").map((part, index, all) => <span key={`${part}-${index}`}>{part}{index < all.length - 1 && <b>›</b>}</span>)}</div><div className="cp-scroll"><ModuleDocument module={active}/><Inspector module={active} compact onOpen={openModule}/></div><div className="cp-statusbar"><span>main*</span><span>portfolio-chat</span><span>TypeScript</span><span>Cloudflare Workers</span></div></main>
-    <Inspector module={active} onOpen={openModule}/>
+    <main className="cp-editor"><div className="cp-tab"><FileIcon/><span>{active.file}</span><b>×</b></div><div className="cp-breadcrumb">{active.path.split("/").map((part, index, all) => <span key={`${part}-${index}`}>{part}{index < all.length - 1 && <b>›</b>}</span>)}</div><div className="cp-scroll"><ModuleDocument module={active}/></div><div className="cp-statusbar"><span>main*</span><span>portfolio-chat</span><span>TypeScript</span><span>Cloudflare Workers</span></div></main>
   </div>{paletteOpen && <CommandPalette modules={modules} onClose={() => setPaletteOpen(false)} onOpen={openModule}/>}</Layout>;
 }
