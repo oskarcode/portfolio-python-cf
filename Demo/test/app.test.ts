@@ -6,6 +6,7 @@ import { createSkillTools, type SkillHubCaller } from "../src/skills/tools";
 import { notifyOwnerOfBooking, notifyOwnerOfHandoff, sendBookingConfirmation } from "../src/notifications/email";
 import { bookingIcs } from "../src/calendar/ics";
 import { createOwnerTools } from "../src/agent/tools";
+import { createScheduleTools } from "../src/agent/scheduling";
 import { createSlot } from "../src/data/calendar";
 import { listAdminWorkspaces } from "../src/data/workspaces";
 
@@ -113,10 +114,18 @@ describe("agent controls", () => {
     expect(VISITOR_PROMPT).toContain("Never ask for personal information");
     expect(VISITOR_PROMPT).toContain("cannot edit content or skills");
     expect(VISITOR_PROMPT).toContain("Never execute arbitrary commands");
+    expect(VISITOR_PROMPT).toContain("external Google Calendar appointment schedule is retired");
     expect(OWNER_PROMPT).toContain("private portfolio content agent");
     expect(OWNER_PROMPT).toContain("Never invent credentials");
     expect(OWNER_PROMPT).toContain("add, reschedule, or cancel open availability");
     expect(OWNER_PROMPT).toContain("require Oskar's explicit confirmation");
+    expect(OWNER_PROMPT).toContain("always use admin_list_calendar");
+    expect(OWNER_PROMPT).toContain("external Google Calendar appointment schedule is retired");
+  });
+
+  it("can list delayed workspace instructions separately from calendar availability", () => {
+    const tools = createScheduleTools(async () => undefined, async () => 0, async () => []).map((tool) => tool.name);
+    expect(tools).toEqual(["list_schedules", "schedule", "cancel_schedule"]);
   });
 
   it("gives the owner agent consultation calendar management tools", () => {

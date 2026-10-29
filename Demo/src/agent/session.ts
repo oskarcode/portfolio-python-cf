@@ -21,7 +21,7 @@ import { createOwnerTools, createPortfolioTools } from "./tools";
 import { createSkillTools } from "../skills/tools";
 import { OWNER_PROMPT, VISITOR_PROMPT } from "./prompt";
 import { createWebTools } from "./web-tools";
-import { createScheduleTools, DeliverScheduledInstruction, matchesSchedule, scheduledDeadline } from "./scheduling";
+import { activeSchedule, createScheduleTools, DeliverScheduledInstruction, matchesSchedule, scheduledDeadline, type ScheduledInstruction } from "./scheduling";
 import { managedWorkspace, workspaceCapabilities } from "../data/workspaces";
 import { workspaceRecord } from "../data/leads";
 
@@ -113,6 +113,7 @@ export class PortfolioSession extends DurableObject<Env> {
     const scheduleTools = createScheduleTools(
       (timestamp) => this.#setAlarmNoLaterThan(timestamp),
       (conversationId, scheduleId) => this.#cancelSchedule(conversationId, scheduleId),
+      (conversationId) => this.#listSchedules(conversationId),
     );
     const extension = defineExtension({
       name: "portfolio",
@@ -149,8 +150,14 @@ export class PortfolioSession extends DurableObject<Env> {
     const capabilities = await workspaceCapabilities(this.env.DB, this.#workspaceId);
     const skillTools = createSkillTools(skillHub, owner ? "content" : "visitor", owner, () => this.#attachedSkillSlugs());
     const webTools = capabilities.webSearch ? createWebTools(this.env) : [];
-    const scheduleTools = capabilities.scheduling ? createScheduleTools((timestamp) => this.#setAlarmNoLaterThan(timestamp), (conversationId, scheduleId) => this.#cancelSchedule(conversationId, scheduleId)) : [];
-    const tools = owner ? [...publicTools, ...ownerTools, ...skillTools, ...webTools, ...scheduleTools] : [...publicTools, ...skillTools, ...webTools, ...scheduleTools];
+    const scheduleTools = capabilities.scheduling ? createScheduleTools(
+      (timestamp) => this.#setAlarmNoLaterThan(timestamp),
+      (conversationId, scheduleId) => this.#cancelSchedule(conversationId, scheduleId),
+      (conversationId) => this.#listSchedules(conversationId),
+    ) : [];
+    // Owner conversations use the private calendar tools, not the visitor booking tools.
+    const ownerPublicTools = publicTools.filter((tool) => tool.name !== "list_consultation_times" && tool.name !== "book_consultation");
+    const tools = owner ? [...ownerPublicTools, ...ownerTools, ...skillTools, ...webTools, ...scheduleTools] : [...publicTools, ...skillTools, ...webTools, ...scheduleTools];
     const availableSkills = (await skillHub.listSkills(owner ? "content" : "visitor")).filter((skill) => skill.enabled && capabilities.skillSlugs.includes(skill.slug));
     const skillCatalog = availableSkills.length ? `Skills attached to this workspace:\n${availableSkills.map((skill) => `- ${skill.slug}: ${skill.description}`).join("\n")}\nActivate a matching skill before using it.` : "No reusable skills are attached to this workspace.";
     const managed = owner ? await managedWorkspace(this.env.DB, this.#workspaceId) : null;
@@ -345,6 +352,15 @@ export class PortfolioSession extends DurableObject<Env> {
     for (const task of matches) await this.#harness.abortTask(task.record.id, BACKGROUND_CONTEXT);
     await this.#refreshAlarm();
     return matches.length;
+  }
+
+  /** Return active delayed instructions for one conversation without exposing other workspaces. */
+  async #listSchedules(conversationId: ConversationId): Promise<ScheduledInstruction[]> {
+    const { tasks } = await this.#harness.inspect(BACKGROUND_CONTEXT);
+    return tasks.flatMap((task) => {
+      const scheduled = activeSchedule(task, conversationId);
+      return scheduled ? [scheduled] : [];
+    }).sort((left, right) => left.runAt - right.runAt);
   }
 
   /**

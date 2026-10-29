@@ -2,7 +2,7 @@
 import { Type } from "@earendil-works/pi-ai";
 import { type ConversationId, defineDoc, defineTask, type TaskInspection, type ToolRegistration } from "@earendil-works/pi-durable";
 
-type ScheduledInstruction = { id: string; conversationId: ConversationId; instruction: string; runAt: number };
+export type ScheduledInstruction = { id: string; conversationId: ConversationId; instruction: string; runAt: number };
 type DeliveryState = { phase: "wait" } | { phase: "deliver" };
 const MAX_DELAY_SECONDS = 366 * 24 * 60 * 60;
 const ScheduleIntent = defineDoc<{ scheduled?: ScheduledInstruction }>({ kind: "portfolio.schedule-intent", version: 1, scope: "task", initial: () => ({}) });
@@ -51,9 +51,15 @@ export function scheduledDeadline(task: TaskInspection): number | undefined {
  * What this function does:
  * - It checks whether a value belongs to the requested scope.
  */
-export function matchesSchedule(task: TaskInspection, conversationId: ConversationId, scheduleId: string): boolean {
+export function activeSchedule(task: TaskInspection, conversationId: ConversationId): ScheduledInstruction | undefined {
+  if (task.record.kind !== DeliverScheduledInstruction.definition.name || task.record.state.status === "terminal" || task.record.state.status === "completing") return undefined;
   const input = task.record.input as Partial<ScheduledInstruction>;
-  return task.record.kind === DeliverScheduledInstruction.definition.name && input.conversationId === conversationId && input.id === scheduleId;
+  if (input.conversationId !== conversationId || typeof input.id !== "string" || typeof input.instruction !== "string" || !Number.isSafeInteger(input.runAt)) return undefined;
+  return input as ScheduledInstruction;
+}
+
+export function matchesSchedule(task: TaskInspection, conversationId: ConversationId, scheduleId: string): boolean {
+  return activeSchedule(task, conversationId)?.id === scheduleId;
 }
 
 /**
@@ -64,10 +70,22 @@ export function matchesSchedule(task: TaskInspection, conversationId: Conversati
  * What this function does:
  * - It constructs and persists a new record.
  */
-export function createScheduleTools(ensureWakeupAt: (timestamp: number) => Promise<void>, cancel: (conversationId: ConversationId, scheduleId: string) => Promise<number>): ToolRegistration[] {
+export function createScheduleTools(
+  ensureWakeupAt: (timestamp: number) => Promise<void>,
+  cancel: (conversationId: ConversationId, scheduleId: string) => Promise<number>,
+  list: (conversationId: ConversationId) => Promise<ScheduledInstruction[]>,
+): ToolRegistration[] {
   return [
     {
-      name: "schedule", description: "Schedule a self-contained instruction to run later in this workspace. Use a relative delay or an absolute ISO 8601 date-time with timezone.", replay: "safe",
+      name: "list_schedules", description: "List active delayed agent instructions in this workspace. This does not list consultation availability; use the calendar tools for consultation times.", replay: "safe",
+      parameters: Type.Object({}),
+      execute: async (_args, api) => {
+        const schedules = await list(api.conversationId);
+        return { output: [{ type: "text" as const, text: JSON.stringify(schedules.map((item) => ({ scheduleId: item.id, instruction: item.instruction, runAt: new Date(item.runAt).toISOString() }))) }] };
+      },
+    },
+    {
+      name: "schedule", description: "Schedule a self-contained agent instruction to run later in this workspace. This does not create consultation availability. Use a relative delay or an absolute ISO 8601 date-time with timezone.", replay: "safe",
       parameters: Type.Object({ instruction: Type.String({ minLength: 1, maxLength: 16_000 }), delaySeconds: Type.Optional(Type.Integer({ minimum: 1, maximum: MAX_DELAY_SECONDS })), at: Type.Optional(Type.String()) }),
       execute: async (args: { instruction: string; delaySeconds?: number; at?: string }, api, context) => {
         const existing = (await api.snapshot(ScheduleIntent, api.taskId, context))?.scheduled;
