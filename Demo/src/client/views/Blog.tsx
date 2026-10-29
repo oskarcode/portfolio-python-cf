@@ -15,7 +15,7 @@ import { Layout } from "../components/Layout";
 export function Blog() {
   const [posts, setPosts] = useState<BlogPost[]>([]);
   useEffect(() => { api.posts().then((data) => setPosts(data.posts)).catch(() => undefined); }, []);
-  return <Layout><section className="blog-hero"><span className="eyebrow">WRITING & NOTES</span><h1>Ideas made useful.</h1><p>Practical writing about Cloudflare, cloud architecture, security, AI agents, MCP, and the things I learn while building.</p></section><section className="blog-grid">{posts.map((post, index) => <a className={index === 0 ? "blog-card featured" : "blog-card"} href={`/blog/${post.slug}`} key={post.id}><div><span className="post-index">{String(index + 1).padStart(2, "0")}</span><div className="tag-list">{post.tags.map((tag) => <span key={tag}>{tag}</span>)}</div></div><h2>{post.title}</h2><p>{post.excerpt}</p><span className="read-more">Read article →</span></a>)}</section></Layout>;
+  return <Layout><section className="blog-hero"><span className="eyebrow">WRITING & NOTES</span><h1>Technical ideas made practical.</h1><p>Practical writing about Cloudflare, cloud architecture, security, AI agents, MCP, and the things I learn while building.</p></section><section className="blog-grid">{posts.map((post, index) => <a className={index === 0 ? "blog-card featured" : "blog-card"} href={`/blog/${post.slug}`} key={post.id}><div><span className="post-index">{String(index + 1).padStart(2, "0")}</span><div className="tag-list">{post.tags.map((tag) => <span key={tag}>{tag}</span>)}</div></div><h2>{post.title}</h2><p>{post.excerpt}</p><span className="read-more">Read article →</span></a>)}</section></Layout>;
 }
 
 /**

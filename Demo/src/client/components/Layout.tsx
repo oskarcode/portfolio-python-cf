@@ -15,11 +15,11 @@ export function Layout({ children }: { children: ReactNode }) {
     <header className="site-header">
       <a className="brand" href="/"><span className="brand-mark">OA</span><span><strong>Oskar Ablimit</strong><small>Solutions Engineer</small></span></a>
       <nav aria-label="Main navigation">
-        <a href="/#capabilities">Capabilities</a>
-        <a href="/#projects">Projects</a>
+        <a href="/#readme">README</a>
+        <a href="/#focus">Focus</a>
+        <a href="/#work">Selected work</a>
         <a href="/#experience">Experience</a>
         <a href="/#writing">Writing</a>
-        <a href="/#work-with-me">Work with me</a>
       </nav>
       <a className={`header-blog-link ${path.startsWith("/blog") ? "active" : ""}`} href="/blog">Blog</a>
       <a className="chat-link" href="/chat">Chat <span>↗</span></a>

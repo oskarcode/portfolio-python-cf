@@ -1,6 +1,5 @@
-// Application ownership: Data-driven technical portfolio presented as readable TypeScript concepts.
-import type { ReactNode } from "react";
-import { useEffect, useState } from "react";
+// Application ownership: Scalable Cloudflare Worker-style portfolio with one canonical module per topic.
+import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api";
 import type { BlogPost, SiteSection } from "../../shared/types";
 import { Layout } from "../components/Layout";
@@ -19,282 +18,328 @@ type Item = {
 };
 
 type Link = { label?: string; href?: string };
-type TokenKind = "keyword" | "type" | "string" | "property" | "comment";
-type FocusArea = {
-  id: "cloud" | "cybersecurity" | "agentic-ai" | "teaching" | "technical-bridge";
-  file: string;
-  title: string;
-  shortTitle: string;
-  summary: string;
-  connects: string;
-  outcomes: string[];
+type ModuleId = "readme" | "wrangler" | "index" | "profile" | "focus" | "bridge" | "work" | "experience" | "teaching" | "writing" | "contact";
+type FocusId = "cloud" | "cybersecurity" | "infrastructure" | "networking" | "agentic-ai" | "agent-harness";
+
+type InspectorData = {
+  status: string;
+  type: string;
+  domains?: string[];
+  bindings?: string[];
+  regions?: string[];
+  evidence?: string[];
+  related?: ModuleId[];
 };
 
-const FOCUS_AREAS: FocusArea[] = [
-  {
-    id: "cloud",
-    file: "cloud.ts",
-    title: "Cloud systems that are practical to operate",
-    shortTitle: "Cloud",
-    summary: "I turn platform capabilities into architectures teams can understand, ship, secure, and maintain.",
-    connects: "strategy → architecture → implementation",
-    outcomes: ["Cloudflare Workers", "Distributed systems", "Platform adoption"],
-  },
-  {
-    id: "cybersecurity",
-    file: "security.ts",
-    title: "Cybersecurity designed into the system",
-    shortTitle: "Cybersecurity",
-    summary: "I connect identity, application security, Zero Trust, and operational constraints instead of treating security as a final checkpoint.",
-    connects: "risk → controls → usable security",
-    outcomes: ["Zero Trust", "Application security", "Secure access"],
-  },
-  {
-    id: "agentic-ai",
-    file: "agents.ts",
-    title: "Agentic AI with clear tools and boundaries",
-    shortTitle: "Agentic AI",
-    summary: "I build durable agents that can reason, use approved tools, collaborate with people, and recover without hiding how the system works.",
-    connects: "models → tools → durable workflows",
-    outcomes: ["AI agents", "Tool orchestration", "Human handoff"],
-  },
-  {
-    id: "teaching",
-    file: "teaching.ts",
-    title: "Teaching that makes technical ideas usable",
-    shortTitle: "Teaching",
-    summary: "I translate architecture into workshops, examples, and explanations that help technical and non-technical teams make better decisions.",
-    connects: "complexity → understanding → confidence",
-    outcomes: ["Workshops", "Technical writing", "Enablement"],
-  },
-  {
-    id: "technical-bridge",
-    file: "bridge.ts",
-    title: "A technical bridge between customers and vendors",
-    shortTitle: "Customer ↔ Vendor",
-    summary: "I help both sides align requirements, product capabilities, security concerns, and delivery plans in language everyone can act on.",
-    connects: "customer needs ↔ vendor capabilities",
-    outcomes: ["Discovery", "Solution design", "Shared execution"],
-  },
-];
+type ContentBlock =
+  | { type: "quickstart"; items: Array<{ file: ModuleId; label: string; description: string }> }
+  | { type: "runtime"; items: Array<{ label: string; value: string }> }
+  | { type: "profile"; achievements: string[]; education: Item[] }
+  | { type: "focus" }
+  | { type: "bridge"; services: Item[] }
+  | { type: "projects"; projects: Item[] }
+  | { type: "timeline"; roles: Item[] }
+  | { type: "teaching"; body: string; topics: string[]; link: string }
+  | { type: "writing"; posts: BlogPost[] }
+  | { type: "contact"; links: Link[]; bookingUrl: string };
 
+type PortfolioModule = {
+  id: ModuleId;
+  file: string;
+  path: string;
+  language: "md" | "ts" | "jsonc";
+  kicker: string;
+  title: string;
+  summary: string;
+  code: string;
+  blocks: ContentBlock[];
+  inspector: InspectorData;
+};
+
+type FocusArea = {
+  id: FocusId;
+  title: string;
+  summary: string;
+  bridge: string;
+  evidence: string[];
+  bindings: string[];
+};
+
+const MODULE_ORDER: ModuleId[] = ["readme", "wrangler", "index", "profile", "focus", "bridge", "work", "experience", "teaching", "writing", "contact"];
 const string = (value: unknown) => typeof value === "string" ? value : "";
 const strings = (value: unknown) => Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
-const items = (section: SiteSection, key = "items") => Array.isArray(section.content[key]) ? section.content[key] as Item[] : [];
+const items = (section: SiteSection | undefined, key = "items") => section && Array.isArray(section.content[key]) ? section.content[key] as Item[] : [];
+const sectionById = (sections: SiteSection[], id: string) => sections.find((section) => section.id === id);
+const isModuleId = (value: string): value is ModuleId => MODULE_ORDER.includes(value as ModuleId);
 
-/** Renders one syntax-colored fragment without introducing a syntax-highlighting dependency. */
-function Token({ kind, children }: { kind: TokenKind; children: ReactNode }) {
-  return <span className={`token-${kind}`}>{children}</span>;
+function focusAreas(capabilities: Item[]): FocusArea[] {
+  const capability = (id: string) => capabilities.find((item) => item.id === id);
+  return [
+    { id: "cloud", title: "Cloud platforms", summary: capability("cloudflare")?.body ?? "Cloud architecture designed for teams to operate and evolve.", bridge: "strategy → architecture → operations", evidence: capability("cloudflare")?.tags ?? ["Workers", "D1", "R2"], bindings: ["Workers", "D1", "Durable Objects"] },
+    { id: "cybersecurity", title: "Cybersecurity", summary: capability("security")?.body ?? "Security designed into architecture rather than added after delivery.", bridge: "risk → controls → usable security", evidence: capability("security")?.tags ?? ["Zero Trust", "WAF"], bindings: ["Access", "WAF", "Zero Trust"] },
+    { id: "infrastructure", title: "Infrastructure", summary: "Reliable application, data, and platform foundations that connect technical requirements to operations.", bridge: "requirements → systems → reliability", evidence: ["Distributed systems", "Serverless", "Data services"], bindings: ["Workers", "AWS", "D1"] },
+    { id: "networking", title: "Networking", summary: "Connectivity, traffic paths, performance, and security controls explained as one system.", bridge: "users → network → applications", evidence: ["Connectivity", "Performance", "Network security"], bindings: ["Cloudflare Network", "Zero Trust"] },
+    { id: "agentic-ai", title: "Agentic AI", summary: capability("agents")?.body ?? "Durable agents that reason, use approved tools, and collaborate with people.", bridge: "models → tools → durable workflows", evidence: capability("agents")?.tags ?? ["Agents", "MCP"], bindings: ["Workers AI", "AI Gateway", "Durable Objects"] },
+    { id: "agent-harness", title: "Agent harness", summary: "The runtime around the model: tools, memory, policy, evaluation, observability, human approval, and recovery.", bridge: "model → harness → governed outcome", evidence: ["Tools", "Memory", "Guardrails", "Evaluation", "Recovery"], bindings: ["Pi Durable", "AI Gateway", "Cloudflare Computer"] },
+  ];
 }
 
-/** Provides the shared file bar and code surface used by focused TypeScript examples. */
-function CodePanel({ file, label, children, className = "" }: { file: string; label: string; children: ReactNode; className?: string }) {
-  return <aside className={`code-panel ${className}`} aria-label={label}>
-    <div className="code-filebar" aria-hidden="true"><span/><span/><span/><code>{file}</code></div>
-    <div className="code-panel-body">{children}</div>
-  </aside>;
+function buildModules(sections: SiteSection[], posts: BlogPost[], activeFocus: FocusId): Record<ModuleId, PortfolioModule> {
+  const about = sectionById(sections, "about");
+  const capabilities = items(sectionById(sections, "capabilities"));
+  const projects = items(sectionById(sections, "projects"));
+  const roles = items(sectionById(sections, "experience"));
+  const teaching = sectionById(sections, "teaching");
+  const credentials = sectionById(sections, "credentials");
+  const service = sectionById(sections, "work");
+  const contact = sectionById(sections, "contact");
+  const focus = focusAreas(capabilities);
+  const selectedFocus = focus.find((area) => area.id === activeFocus) ?? focus[0];
+  const education = items(credentials, "education");
+  const certifications = strings(credentials?.content.certifications);
+  const links = Array.isArray(contact?.content.links) ? contact.content.links as Link[] : [];
+
+  return {
+    readme: {
+      id: "readme", file: "README.md", path: "portfolio-worker/README.md", language: "md", kicker: "PORTFOLIO WORKER / README",
+      title: "Senior Customer Engineer at Cloudflare",
+      summary: "Cloud security, agentic AI, cybersecurity, infrastructure, and networking—connected to customer outcomes through engineering, teaching, and technical leadership.",
+      code: `# portfolio-worker\n\nA Cloudflare-native portfolio for systems, people, and outcomes.`,
+      blocks: [
+        { type: "runtime", items: [{ label: "Worker", value: "deployed" }, { label: "AI Gateway", value: "connected" }, { label: "Durable workspace", value: "available" }] },
+        { type: "quickstart", items: [{ file: "profile", label: "Open profile.ts", description: "Professional summary and recognition" }, { file: "focus", label: "Open focus.ts", description: "Technical domains and agent harness" }, { file: "work", label: "Open selected-work.ts", description: "Demonstrated systems" }, { file: "contact", label: "Open contact.ts", description: "Start a conversation" }] },
+      ],
+      inspector: { status: "deployed", type: "Worker portfolio", bindings: ["AI", "D1", "Durable Objects", "Static Assets"], related: ["profile", "focus", "work"] },
+    },
+    wrangler: {
+      id: "wrangler", file: "wrangler.jsonc", path: "portfolio-worker/wrangler.jsonc", language: "jsonc", kicker: "INFRASTRUCTURE / CLOUDFLARE",
+      title: "Cloudflare-native by design",
+      summary: "The portfolio is a working Cloudflare system, not a static mockup. Its bindings provide content, inference, durable collaboration, skills, and static delivery.",
+      code: `{
+  "name": "portfolio-worker",
+  "main": "src/index.ts",
+  "ai": { "binding": "AI", "gateway": "portfolio-chat" },
+  "d1_databases": [{ "binding": "DB" }],
+  "durable_objects": ["PortfolioSession", "SkillHub"],
+  "assets": { "binding": "ASSETS" }
+}`,
+      blocks: [{ type: "runtime", items: [{ label: "Workers", value: "application + API" }, { label: "D1", value: "content + records" }, { label: "Durable Objects", value: "agent workspaces" }, { label: "AI Gateway", value: "model control" }] }],
+      inspector: { status: "active", type: "Cloudflare configuration", bindings: ["AI", "D1", "R2", "Durable Objects", "Worker Loader"], related: ["index", "focus"] },
+    },
+    index: {
+      id: "index", file: "index.ts", path: "portfolio-worker/src/index.ts", language: "ts", kicker: "WORKER ENTRYPOINT",
+      title: "One Worker, focused modules",
+      summary: "The entrypoint composes each portfolio module without repeating its content. Every file owns one responsibility and imports shared data rather than copying it.",
+      code: `import { profile } from "./profile";
+import { focus } from "./focus";
+import { selectedWork } from "./selected-work";
+
+export default {
+  async fetch(request: Request, env: Env) {
+    return portfolio({ profile, focus, selectedWork, env });
+  },
+};`,
+      blocks: [{ type: "quickstart", items: [{ file: "profile", label: "profile.ts", description: "Who I am" }, { file: "focus", label: "focus.ts", description: "What I work on" }, { file: "bridge", label: "technical-bridge.ts", description: "How I connect people and systems" }, { file: "work", label: "selected-work.ts", description: "Evidence through implementation" }] }],
+      inspector: { status: "loaded", type: "WorkerEntrypoint", domains: ["Composition", "Routing"], related: ["profile", "focus", "work"] },
+    },
+    profile: {
+      id: "profile", file: "profile.ts", path: "portfolio-worker/src/profile.ts", language: "ts", kicker: "CANONICAL PROFILE",
+      title: "Engineering mindset, customer outcomes",
+      summary: "I hold a Master of Engineering in Cloud Computing and specialize in cloud security, agentic AI, cybersecurity, infrastructure, and networking—connecting technical expertise with business transformation.",
+      code: `export const oskar: CustomerEngineer = {
+  company: "Cloudflare",
+  regions: ["APAC", "EMEA", "North America"],
+  experience: ["AWS", "Alibaba Cloud", "Tencent Cloud", "Cloudflare"],
+  recognition: ["top 10% performer", "AI Wizard"],
+};`,
+      blocks: [{ type: "profile", achievements: ["Top-10% enterprise performer", "$1M+ quota achievement", "Cloudflare-recognized AI Wizard", "Experience across APAC, EMEA, and North America", ...certifications.slice(0, 3)], education }],
+      inspector: { status: "current", type: "CustomerEngineer", domains: ["Cloud security", "Agentic AI", "Infrastructure", "Networking"], regions: ["APAC", "EMEA", "North America"], evidence: ["AWS", "Alibaba Cloud", "Tencent Cloud", "Cloudflare"], related: ["experience", "teaching"] },
+    },
+    focus: {
+      id: "focus", file: "focus.ts", path: "portfolio-worker/src/focus.ts", language: "ts", kicker: "TECHNICAL FOCUS",
+      title: "Systems I connect",
+      summary: "Select a focus area to see its unique responsibility. The shared inspector shows related technologies without repeating tags throughout the page.",
+      code: `export const focus: FocusArea[] = [
+  cloud,
+  cybersecurity,
+  infrastructure,
+  networking,
+  agenticAI,
+  agentHarness,
+];`,
+      blocks: [{ type: "focus" }],
+      inspector: { status: "selected", type: "FocusArea", domains: [selectedFocus.title], bindings: selectedFocus.bindings, evidence: selectedFocus.evidence, related: ["bridge", "work", "writing"] },
+    },
+    bridge: {
+      id: "bridge", file: "technical-bridge.ts", path: "portfolio-worker/src/technical-bridge.ts", language: "ts", kicker: "CUSTOMER ↔ VENDOR ↔ ENGINEERING",
+      title: "Build shared technical direction",
+      summary: "The differentiator is not only knowing the technology. It is translating customer requirements, vendor capabilities, and engineering constraints into one plan people can execute.",
+      code: `export function buildTechnicalBridge(
+  customer: Requirements,
+  vendor: Capabilities,
+): SharedPlan {
+  return discover(customer)
+    .mapTo(vendor)
+    .design()
+    .demonstrate()
+    .enable();
+}`,
+      blocks: [{ type: "bridge", services: items(service).slice(0, 4) }],
+      inspector: { status: "available", type: "SharedPlan", domains: ["Discovery", "Architecture", "Demonstration", "Enablement"], related: ["profile", "focus", "work"] },
+    },
+    work: {
+      id: "work", file: "selected-work.ts", path: "portfolio-worker/src/selected-work.ts", language: "ts", kicker: "WORKING EVIDENCE",
+      title: "Selected technical work",
+      summary: "Projects are presented as evidence: the problem, system, and demonstrated outcome—not another repetition of the professional summary.",
+      code: `export const selectedWork = projects.filter(
+  ({ outcome }) => outcome.isDemonstrated
+);`,
+      blocks: [{ type: "projects", projects }],
+      inspector: { status: "published", type: "Project[]", domains: ["Cloud", "Security", "Agentic AI", "Education"], evidence: [`${projects.length} demonstrated projects`], related: ["focus", "bridge"] },
+    },
+    experience: {
+      id: "experience", file: "experience.ts", path: "portfolio-worker/src/experience.ts", language: "ts", kicker: "EXECUTION HISTORY",
+      title: "Experience across regions and platforms",
+      summary: "Professional history stays here. Recognition remains in profile.ts, and teaching remains in teaching.ts, so each file answers one question.",
+      code: `export const experience: Experience[] = [
+  cloudflare,
+  tencentCloud,
+  alibabaCloud,
+  aws,
+];`,
+      blocks: [{ type: "timeline", roles }],
+      inspector: { status: "verified", type: "Experience[]", regions: ["APAC", "EMEA", "North America"], evidence: ["Cloudflare", "Tencent Cloud", "Alibaba Cloud", "AWS"], related: ["profile", "teaching"] },
+    },
+    teaching: {
+      id: "teaching", file: "teaching.ts", path: "portfolio-worker/src/teaching.ts", language: "ts", kicker: "TEACHING + MENTORSHIP",
+      title: "Teach systems, develop careers",
+      summary: "University teaching and career mentorship share one purpose: helping people build the technical confidence to make their next move.",
+      code: `export function mentor(goal: CareerGoal): NextStep {
+  return goal
+    .buildTechnicalConfidence()
+    .translateExperience()
+    .developTechSalesSkills()
+    .moveIntoTechnology();
+}`,
+      blocks: [{ type: "teaching", body: string(teaching?.content.body), topics: strings(teaching?.content.topics), link: string(teaching?.content.link) }],
+      inspector: { status: "active", type: "Teaching + Mentorship", domains: ["Cloud computing", "AWS", "Career transition", "Technical sales"], evidence: ["Yeshiva University", "Graduate instruction", "Career mentorship"], related: ["profile", "experience"] },
+    },
+    writing: {
+      id: "writing", file: "writing.ts", path: "portfolio-worker/src/writing.ts", language: "ts", kicker: "TECHNICAL EXPLANATIONS",
+      title: "Writing that makes systems understandable",
+      summary: "Practical explanations across cloud, security, architecture, AI, and solutions engineering.",
+      code: `export const articles = await getWriting({
+  topics: ["cloud", "security", "AI", "architecture"],
+  limit: 6,
+});`,
+      blocks: [{ type: "writing", posts: posts.slice(0, 6) }],
+      inspector: { status: "published", type: "Article[]", domains: ["Cloud", "Security", "AI", "Architecture"], evidence: [`${posts.length} published articles`], related: ["focus", "teaching"] },
+    },
+    contact: {
+      id: "contact", file: "contact.ts", path: "portfolio-worker/src/contact.ts", language: "ts", kicker: "NEXT STEP",
+      title: contact?.title ?? "Let’s start with what you need.",
+      summary: string(contact?.content.body) || "Bring a system, requirement, or technical idea. We can make the next decision clear.",
+      code: `export async function nextStep() {
+  const context = await understandYourNeed();
+  return startPrivateConversation(context);
+}`,
+      blocks: [{ type: "contact", links, bookingUrl: string(service?.content.bookingUrl) }],
+      inspector: { status: "available", type: "Conversation", domains: ["Architecture", "Cloudflare", "AI agents", "Mentorship"], related: ["readme", "bridge", "work"] },
+    },
+  };
 }
 
-/** Introduces each content section as a small, valid-looking TypeScript function. */
-function CodeSection({ section, signature, children, className = "" }: { section: SiteSection; signature: ReactNode; children: ReactNode; className?: string }) {
-  return <section className={`content-section code-section ${className}`} id={section.slug}>
-    <header className="section-heading">
-      <span className="section-kicker">{String(section.sortOrder).padStart(2, "0")} / {section.slug}.ts</span>
-      <h2>{section.title}</h2>
-      {section.summary && <p>{section.summary}</p>}
-    </header>
-    <div className="section-code" aria-hidden="true">{signature} <span className="code-brace">{"{"}</span></div>
-    <div className="section-result">{children}</div>
-    <div className="section-code section-code-close" aria-hidden="true"><span className="code-brace">{"}"}</span></div>
-  </section>;
+/** Line-numbered code preview keeps code structural rather than duplicating prose. */
+function CodeBlock({ code }: { code: string }) {
+  return <div className="cp-code" aria-label="Code example">{code.trim().split("\n").map((line, index) => <div key={`${index}-${line}`}><span>{String(index + 1).padStart(2, "0")}</span><code>{line || " "}</code></div>)}</div>;
 }
 
-/** Lets visitors inspect the five connected focus areas without requiring technical knowledge. */
-function FocusExplorer() {
-  const [activeId, setActiveId] = useState<FocusArea["id"]>("cloud");
-  const active = FOCUS_AREAS.find((area) => area.id === activeId) ?? FOCUS_AREAS[0];
-
-  return <div className="focus-explorer">
-    <header className="focus-explorer-bar">
-      <div><span className="status-light"/><code>focus.runtime.ts</code></div>
-      <span>SELECT A FOCUS AREA</span>
-      <strong>● AVAILABLE</strong>
-    </header>
-    <div className="focus-workbench">
-      <nav className="focus-files" aria-label="Primary focus areas">
-        {FOCUS_AREAS.map((area, index) => <button type="button" className={area.id === active.id ? "active" : ""} onClick={() => setActiveId(area.id)} aria-pressed={area.id === active.id} key={area.id}>
-          <span>{String(index + 1).padStart(2, "0")}</span><strong>{area.shortTitle}</strong><small>{area.file}</small>
-        </button>)}
-      </nav>
-      <div className="focus-output" key={active.id}>
-        <div className="focus-output-code" aria-hidden="true"><span className="line-number">01</span><Token kind="keyword">export function</Token> <Token kind="property">{active.id.replace("-", "_")}</Token>() <span>{"{"}</span></div>
-        <div className="focus-output-content">
-          <span className="section-kicker">PRIMARY FOCUS / {active.file}</span>
-          <h2>{active.title}</h2>
-          <p>{active.summary}</p>
-          <div className="bridge-line"><span>bridge</span><strong>{active.connects}</strong></div>
-          <div className="focus-outcomes">{active.outcomes.map((outcome) => <span key={outcome}>{outcome}</span>)}</div>
-        </div>
-        <div className="focus-output-code" aria-hidden="true"><span className="line-number">08</span><Token kind="keyword">return</Token> <Token kind="string">"clear, secure, useful"</Token>;<br/><span className="line-number">09</span><span>{"}"}</span></div>
-      </div>
-    </div>
-  </div>;
+function FileIcon({ language }: { language: PortfolioModule["language"] }) {
+  return <span className={`cp-file-icon ${language}`}>{language === "ts" ? "TS" : language === "md" ? "M↓" : "{}"}</span>;
 }
 
-/** Presents the portfolio identity and the connected technical focus system. */
-function Hero({ section }: { section: SiteSection }) {
-  return <section className="tech-hero" id="home">
-    <div className="hero-grid">
-      <div className="hero-copy">
-        <span className="section-kicker">SOLUTIONS ENGINEERING / SYSTEMS + PEOPLE</span>
-        <h1>Cloud, cybersecurity, and agentic AI—made clear and useful.</h1>
-        <p className="hero-summary">I teach, design, and build the technical bridge between customers, vendors, and the systems they need to trust.</p>
-        <div className="hero-actions">
-          <a className="button primary" href="#projects">View technical work</a>
-          <a className="button secondary" href="/chat">Ask a specific question</a>
-        </div>
-        <div className="hero-status" aria-label="Professional focus"><span>Cloud</span><span>Cybersecurity</span><span>Agentic AI</span><span>Teaching</span></div>
-      </div>
-      <CodePanel file="portfolio.ts" label="Portfolio focus written as TypeScript" className="hero-terminal">
-        <pre><code><Token kind="keyword">const</Token> <Token kind="property">mission</Token>: <Token kind="type">TechnicalBridge</Token> = {`{`}{"\n"}  connect: [{"\n"}    <Token kind="string">"customers"</Token>,{"\n"}    <Token kind="string">"vendors"</Token>,{"\n"}    <Token kind="string">"technical teams"</Token>,{"\n"}  ],{"\n"}  through: [{"\n"}    <Token kind="string">"cloud"</Token>,{"\n"}    <Token kind="string">"cybersecurity"</Token>,{"\n"}    <Token kind="string">"agentic AI"</Token>,{"\n"}    <Token kind="string">"teaching"</Token>,{"\n"}  ],{"\n"}  outcome: <Token kind="string">"shared understanding"</Token>,{"\n"}{`}`};</code></pre>
-      </CodePanel>
-    </div>
-    <FocusExplorer/>
-  </section>;
+/** Compact file tree mirrors a real Worker project without artificial subfiles. */
+function Explorer({ modules, active, srcOpen, onToggle, onOpen }: { modules: Record<ModuleId, PortfolioModule>; active: ModuleId; srcOpen: boolean; onToggle: () => void; onOpen: (id: ModuleId) => void }) {
+  const file = (id: ModuleId) => <button type="button" className={active === id ? "active" : ""} onClick={() => onOpen(id)} aria-current={active === id ? "page" : undefined} key={id}><FileIcon language={modules[id].language}/><span>{modules[id].file}</span></button>;
+  return <div className="cp-tree"><div className="cp-root"><span>⌄</span><strong>portfolio-worker</strong></div>{file("readme")}{file("wrangler")}<button type="button" className="cp-folder" onClick={onToggle} aria-expanded={srcOpen}><span>{srcOpen ? "⌄" : "›"}</span><strong>src</strong></button>{srcOpen && <div className="cp-src">{MODULE_ORDER.filter((id) => !["readme", "wrangler"].includes(id)).map(file)}</div>}</div>;
 }
 
-/** Returns the profile narrative and its strongest supporting facts. */
-function About({ section }: { section: SiteSection }) {
-  const highlights = strings(section.content.highlights);
-  return <CodeSection section={section} signature={<><Token kind="keyword">function</Token> <Token kind="property">about</Token>(): <Token kind="type">Profile</Token></>}>
-    <div className="about-grid">
-      <div><div className="result-label"><Token kind="keyword">return</Token> <span>{"{"}</span></div><p className="large-copy">{string(section.content.body)}</p></div>
-      <div><div className="property-label">strengths: [</div><ul className="data-list">{highlights.map((highlight) => <li key={highlight}><span>✓</span><span>"{highlight}"</span></li>)}</ul><div className="property-label">]</div></div>
-    </div>
-  </CodeSection>;
+function FocusBlock({ selected, onSelect }: { selected: FocusId; onSelect: (id: FocusId) => void }) {
+  const focus = focusAreas([]);
+  const active = focus.find((item) => item.id === selected) ?? focus[0];
+  return <div className="cp-focus"><div className="cp-focus-grid">{focus.map((item) => <button type="button" className={item.id === selected ? "active" : ""} onClick={() => onSelect(item.id)} aria-pressed={item.id === selected} key={item.id}><span>0{focus.indexOf(item) + 1}</span><strong>{item.title}</strong><small>{item.bridge}</small></button>)}</div><article className="cp-focus-detail" key={active.id}><span>SELECTED MODULE</span><h2>{active.title}</h2><p>{active.summary}</p><dl><dt>Bridge</dt><dd>{active.bridge}</dd><dt>Evidence</dt><dd>{active.evidence.join(" · ")}</dd></dl></article></div>;
 }
 
-/** Maps the capability array into compact, readable technical cards. */
-function Capabilities({ section }: { section: SiteSection }) {
-  return <CodeSection section={section} signature={<><Token kind="keyword">function</Token> <Token kind="property">capabilities</Token>(): <Token kind="type">Capability[]</Token></>}>
-    <div className="inline-code-note" aria-hidden="true"><Token kind="keyword">return</Token> capabilities.<Token kind="property">map</Token>(renderCapability);</div>
-    <div className="technical-grid">{items(section).map((item, index) => <article className="technical-card" key={item.id ?? item.title}>
-      <div className="card-code-head"><span>capabilities[{index}]</span><span>{"{"}</span></div>
-      <h3>{item.title}</h3><p>{item.body}</p>
-      <div className="tag-list">{item.tags?.map((tag) => <span key={tag}>"{tag}"</span>)}</div>
-      <span className="card-code-end">{"}"},</span>
-    </article>)}</div>
-  </CodeSection>;
-}
-
-/** Presents each project as a typed buildProject call with a visible outcome. */
-function Projects({ section }: { section: SiteSection }) {
-  return <CodeSection section={section} signature={<><Token kind="keyword">const</Token> <Token kind="property">projects</Token>: <Token kind="type">Project[]</Token> =</>} className="muted-section">
-    <div className="project-grid">{items(section).map((item) => <a className="project-card" href={item.url} key={item.id} target="_blank" rel="noreferrer">
-      <div className="project-top"><span><Token kind="property">buildProject</Token>({"{"}</span><span>↗</span></div>
-      <div className="project-field">name:</div><h3>"{item.title}"</h3>
-      <div className="project-field">outcome:</div><p>{item.summary}</p>
-      <div className="tag-list">{item.tags?.map((tag) => <span key={tag}>"{tag}"</span>)}</div>
-      <span className="card-code-end">{"}"});</span>
-    </a>)}</div>
-  </CodeSection>;
-}
-
-/** Adds each role to an execution-history timeline. */
-function Timeline({ section }: { section: SiteSection }) {
-  return <CodeSection section={section} signature={<><Token kind="keyword">function</Token> <Token kind="property">career</Token>(): <Token kind="type">Experience[]</Token></>}>
-    <div className="timeline">{items(section).map((item) => <article key={`${item.company}-${item.title}`}>
-      <div className="timeline-meta"><strong>{item.period}</strong><span>{item.location}</span></div>
-      <div className="timeline-call"><span className="call-open"><Token kind="property">experience.add</Token>({"{"}</span><h3>{item.title}</h3><h4>{item.company}</h4><p>{item.body}</p><span className="card-code-end">{"}"});</span></div>
-    </article>)}</div>
-  </CodeSection>;
-}
-
-/** Uses a generic teaching function to frame the course topics. */
-function Teaching({ section }: { section: SiteSection }) {
-  const topics = strings(section.content.topics);
-  return <CodeSection section={section} signature={<><Token kind="keyword">function</Token> <Token kind="property">teach</Token>&lt;<Token kind="type">Topic</Token>&gt;(topics: <Token kind="type">Topic[]</Token>)</>} className="muted-section">
-    <div className="teaching-grid"><div><div className="result-label"><Token kind="keyword">return</Token> <Token kind="string">"complex ideas made practical"</Token>;</div><p className="large-copy">{string(section.content.body)}</p><a className="text-link" href={string(section.content.link)} target="_blank" rel="noreferrer">View course repository <span aria-hidden="true">→ openRepository()</span></a></div>
-      <div><div className="property-label">teach([</div><ol className="topic-list">{topics.map((topic, index) => <li key={topic}><span>{String(index + 1).padStart(2, "0")}</span><span>"{topic}",</span></li>)}</ol><div className="property-label">]);</div></div>
-    </div>
-  </CodeSection>;
-}
-
-/** Groups education, certifications, and languages under one interface-shaped result. */
-function Credentials({ section }: { section: SiteSection }) {
-  const education = items(section, "education");
-  const certifications = strings(section.content.certifications);
-  const languages = strings(section.content.languages);
-  return <CodeSection section={section} signature={<><Token kind="keyword">interface</Token> <Token kind="type">Credentials</Token></>}>
-    <div className="credential-grid">
-      <div><h3>credentials.education</h3>{education.map((item) => <div className="credential-item" key={item.title}><strong>{item.title}</strong><span>{item.company ?? item.institution}</span><small>{item.period}</small></div>)}</div>
-      <div><h3>credentials.certifications</h3>{certifications.map((item) => <div className="credential-line" key={item}>✓ {item}</div>)}</div>
-      <div><h3>credentials.languages</h3>{languages.map((item) => <div className="credential-line" key={item}>"{item}"</div>)}</div>
-    </div>
-  </CodeSection>;
-}
-
-/** Renders recent D1 articles as the result of an asynchronous content query. */
-function Writing({ section, posts }: { section: SiteSection; posts: BlogPost[] }) {
-  return <CodeSection section={section} signature={<><Token kind="keyword">const</Token> <Token kind="property">articles</Token> = <Token kind="keyword">await</Token> <Token kind="property">getWriting</Token>()</>} className="dark-section">
-    <div className="inline-code-note" aria-hidden="true"><Token kind="comment">// The latest technical notes, returned from D1.</Token></div>
-    <div className="writing-list">{posts.slice(0, 6).map((post, index) => <a href={`/blog/${post.slug}`} key={post.id}><div><span>articles[{index}] · {post.tags.slice(0, 2).join(" · ")}</span><h3>"{post.title}"</h3><p>{post.excerpt}</p></div><strong>Read →</strong></a>)}</div>
-    <a className="button outline-light" href="/blog">View all {posts.length} articles</a>
-  </CodeSection>;
-}
-
-/** Describes consulting services as a clear sequence from problem to outcome. */
-function Services({ section }: { section: SiteSection }) {
-  return <CodeSection section={section} signature={<><Token kind="keyword">function</Token> <Token kind="property">solve</Token>(problem: <Token kind="type">TechnicalProblem</Token>): <Token kind="type">Outcome</Token></>} className="services-section">
-    <p className="service-intro">{string(section.content.intro)}</p>
-    <div className="service-list">{items(section).map((item, index) => <article key={item.title}><span className="service-call">.{["clarify", "design", "implement", "enable", "scale"][index] ?? "solve"}()</span><h3>{item.title}</h3><p>{item.body}</p></article>)}</div>
-    <div className="hero-actions"><a className="button primary" href="/chat">Describe what you need</a><a className="button secondary" href={string(section.content.bookingUrl)} target="_blank" rel="noreferrer">Schedule a conversation ↗</a></div>
-  </CodeSection>;
-}
-
-/** Closes the page with an understandable async invitation rather than a decorative terminal. */
-function Contact({ section }: { section: SiteSection }) {
-  const links = Array.isArray(section.content.links) ? section.content.links as Link[] : [];
-  return <section className="contact-section" id={section.slug}>
-    <span className="section-kicker">CONTACT / contact.ts</span>
-    <div className="contact-signature" aria-hidden="true"><Token kind="keyword">async function</Token> <Token kind="property">startConversation</Token>() <span>{"{"}</span></div>
-    <h2>{section.title}</h2><p>{string(section.content.body)}</p>
-    <div className="contact-actions"><a className="button primary" href="/chat">Start a private conversation</a>{links.map((link) => <a href={link.href} key={link.label} target="_blank" rel="noreferrer">{link.label} ↗</a>)}</div>
-    <div className="contact-signature contact-close" aria-hidden="true"><Token kind="comment">// Opens a private visitor workspace.</Token><br/><span>{"}"}</span></div>
-  </section>;
-}
-
-/** Selects the renderer corresponding to each D1-managed section type. */
-function RenderSection({ section, posts }: { section: SiteSection; posts: BlogPost[] }) {
-  switch (section.type) {
-    case "hero": return <Hero section={section}/>;
-    case "cards": return <Capabilities section={section}/>;
-    case "projects": return <Projects section={section}/>;
-    case "timeline": return <Timeline section={section}/>;
-    case "credentials": return <Credentials section={section}/>;
-    case "writing": return <Writing section={section} posts={posts}/>;
-    case "services": return <Services section={section}/>;
-    case "contact": return <Contact section={section}/>;
-    default: return section.id === "teaching" ? <Teaching section={section}/> : <About section={section}/>;
+function BlockRenderer({ block, onOpen, selectedFocus, onFocus }: { block: ContentBlock; onOpen: (id: ModuleId) => void; selectedFocus: FocusId; onFocus: (id: FocusId) => void }) {
+  switch (block.type) {
+    case "quickstart": return <div className="cp-quickstart">{block.items.map((item, index) => <button type="button" onClick={() => onOpen(item.file)} key={item.file}><span>{String(index + 1).padStart(2, "0")}</span><div><strong>{item.label}</strong><small>{item.description}</small></div><b>→</b></button>)}</div>;
+    case "runtime": return <div className="cp-runtime">{block.items.map((item) => <div key={item.label}><span>● {item.label}</span><strong>{item.value}</strong></div>)}</div>;
+    case "profile": return <div className="cp-profile"><section><h2>Professional achievements</h2>{block.achievements.map((item) => <p key={item}>✓ {item}</p>)}</section><section><h2>Education</h2>{block.education.map((item) => <div key={item.title}><strong>{item.title}</strong><span>{item.company ?? item.institution}</span><small>{item.period}</small></div>)}</section></div>;
+    case "focus": return <FocusBlock selected={selectedFocus} onSelect={onFocus}/>;
+    case "bridge": return <><div className="cp-bridge-map"><div><span>CUSTOMER</span><strong>Requirements</strong><small>Risks · constraints · outcomes</small></div><b>↔</b><div className="center"><span>SHARED PLAN</span><strong>Architecture</strong><small>Demonstration · enablement</small></div><b>↔</b><div><span>VENDOR</span><strong>Capabilities</strong><small>Products · limits · roadmap</small></div></div><div className="cp-service-grid">{block.services.map((service, index) => <article key={service.title}><code>.{["discover", "translate", "design", "enable"][index]}()</code><h3>{service.title}</h3><p>{service.body}</p></article>)}</div></>;
+    case "projects": return <div className="cp-projects">{block.projects.map((project, index) => <a href={project.url} target="_blank" rel="noreferrer" key={project.id ?? project.title}><header><span>{String(index + 1).padStart(2, "0")}</span><b>↗</b></header><h2>{project.title}</h2><p>{project.summary}</p><div>{project.tags?.map((tag) => <span key={tag}>{tag}</span>)}</div></a>)}</div>;
+    case "timeline": return <div className="cp-timeline">{block.roles.map((role) => <article key={`${role.company}-${role.title}`}><time>{role.period}</time><div><h2>{role.title}</h2><strong>{role.company}</strong><small>{role.location}</small><p>{role.body}</p></div></article>)}</div>;
+    case "teaching": return <div className="cp-teaching"><p>{block.body}</p><div>{block.topics.map((topic) => <span key={topic}>{topic}</span>)}</div>{block.link && <a href={block.link} target="_blank" rel="noreferrer">View teaching repository ↗</a>}</div>;
+    case "writing": return <div className="cp-writing">{block.posts.map((post, index) => <a href={`/blog/${post.slug}`} key={post.id}><span>{String(index + 1).padStart(2, "0")}</span><div><small>{post.tags.slice(0, 2).join(" · ")}</small><h2>{post.title}</h2><p>{post.excerpt}</p></div><b>Read →</b></a>)}</div>;
+    case "contact": return <div className="cp-contact"><a href="/chat">Start a private conversation</a>{block.bookingUrl && <a className="secondary" href={block.bookingUrl} target="_blank" rel="noreferrer">Schedule a conversation</a>}{block.links.map((link) => <a className="text" href={link.href} target="_blank" rel="noreferrer" key={link.label}>{link.label} ↗</a>)}</div>;
   }
 }
 
-/** Loads public D1 content once and renders the data-driven homepage. */
+function ModuleDocument({ module, onOpen, selectedFocus, onFocus }: { module: PortfolioModule; onOpen: (id: ModuleId) => void; selectedFocus: FocusId; onFocus: (id: FocusId) => void }) {
+  return <article className="cp-document"><span className="cp-kicker">{module.kicker}</span><h1>{module.title}</h1><p className="cp-lead">{module.summary}</p><CodeBlock code={module.code}/>{module.blocks.map((block, index) => <BlockRenderer block={block} onOpen={onOpen} selectedFocus={selectedFocus} onFocus={onFocus} key={`${block.type}-${index}`}/>)}</article>;
+}
+
+function Inspector({ module, compact = false, onOpen }: { module: PortfolioModule; compact?: boolean; onOpen: (id: ModuleId) => void }) {
+  const groups: Array<[string, string[] | undefined]> = [["Domains", module.inspector.domains], ["Bindings", module.inspector.bindings], ["Regions", module.inspector.regions], ["Evidence", module.inspector.evidence]];
+  return <aside className={`cp-inspector ${compact ? "compact" : ""}`}><header><strong>MODULE INSPECTOR</strong><span>•••</span></header><section><small>STATUS</small><p className="cp-status"><i/> {module.inspector.status}</p></section><section><small>TYPE</small><code>{module.inspector.type}</code></section>{groups.filter(([, values]) => values?.length).map(([label, values]) => <section key={label}><small>{label.toUpperCase()}</small><div className="cp-chips">{values?.map((value) => <span key={value}>{value}</span>)}</div></section>)}{module.inspector.related?.length && <section><small>RELATED FILES</small><div className="cp-related">{module.inspector.related.map((id) => <button type="button" onClick={() => onOpen(id)} key={id}>{id === "work" ? "selected-work" : id}.ts <span>→</span></button>)}</div></section>}</aside>;
+}
+
+function CommandPalette({ modules, onClose, onOpen }: { modules: Record<ModuleId, PortfolioModule>; onClose: () => void; onOpen: (id: ModuleId) => void }) {
+  const [query, setQuery] = useState("");
+  const input = useRef<HTMLInputElement>(null);
+  useEffect(() => input.current?.focus(), []);
+  const results = MODULE_ORDER.filter((id) => `${modules[id].file} ${modules[id].title} ${modules[id].summary}`.toLowerCase().includes(query.toLowerCase()));
+  return <div className="cp-palette-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><div className="cp-palette" role="dialog" aria-modal="true" aria-label="Open portfolio file"><header><span>⌕</span><input ref={input} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search files, focus areas, or experience…"/><kbd>ESC</kbd></header><div>{results.map((id) => <button type="button" onClick={() => onOpen(id)} key={id}><FileIcon language={modules[id].language}/><span><strong>{modules[id].file}</strong><small>{modules[id].title}</small></span><b>↵</b></button>)}</div></div></div>;
+}
+
+/** Loads public content and operates the portfolio as one Cloudflare Worker project. */
 export function Website() {
+  const initial = window.location.hash.slice(1);
+  const [activeId, setActiveId] = useState<ModuleId>(isModuleId(initial) ? initial : "readme");
+  const [selectedFocus, setSelectedFocus] = useState<FocusId>("cloud");
   const [sections, setSections] = useState<SiteSection[]>([]);
   const [posts, setPosts] = useState<BlogPost[]>([]);
+  const [srcOpen, setSrcOpen] = useState(true);
+  const [mobileExplorer, setMobileExplorer] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    Promise.all([api.content(), api.posts()]).then(([content, writing]) => {
-      setSections(content.sections);
-      setPosts(writing.posts);
-    }).catch((failure: Error) => setError(failure.message));
+    Promise.all([api.content(), api.posts()]).then(([content, writing]) => { setSections(content.sections); setPosts(writing.posts); }).catch((failure: Error) => setError(failure.message));
   }, []);
 
-  return <Layout>{error
-    ? <div className="state-message">{error}</div>
-    : sections.length === 0
-      ? <div className="state-message">Loading portfolio…</div>
-      : sections.map((section) => <RenderSection section={section} posts={posts} key={section.id}/>)}</Layout>;
+  useEffect(() => {
+    const sync = () => { const value = window.location.hash.slice(1); if (isModuleId(value)) setActiveId(value); };
+    const keyboard = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") { event.preventDefault(); setPaletteOpen(true); }
+      if (event.key === "Escape") setPaletteOpen(false);
+    };
+    window.addEventListener("hashchange", sync); window.addEventListener("popstate", sync); window.addEventListener("keydown", keyboard);
+    return () => { window.removeEventListener("hashchange", sync); window.removeEventListener("popstate", sync); window.removeEventListener("keydown", keyboard); };
+  }, []);
+
+  const modules = useMemo(() => buildModules(sections, posts, selectedFocus), [sections, posts, selectedFocus]);
+  const active = modules[activeId];
+  const openModule = (id: ModuleId) => { setActiveId(id); setMobileExplorer(false); setPaletteOpen(false); window.history.pushState(null, "", `#${id}`); window.scrollTo({ top: 0, behavior: "smooth" }); };
+
+  if (error) return <Layout><div className="state-message">{error}</div></Layout>;
+  if (sections.length === 0) return <Layout><div className="state-message">Loading portfolio worker…</div></Layout>;
+
+  return <Layout><div className="control-plane">
+    <div className="cp-deploybar"><div><span className="cp-cf-mark">CF</span><strong>portfolio-worker</strong><small>production</small></div><div><span><i/> DEPLOYED</span><span>D1 ●</span><span>AI ●</span><span>DO ●</span></div><button type="button" onClick={() => setPaletteOpen(true)}>⌘K Search</button></div>
+    <button type="button" className="cp-mobile-explorer" onClick={() => setMobileExplorer((open) => !open)} aria-expanded={mobileExplorer}>☰ Explorer</button>
+    <aside className={`cp-explorer ${mobileExplorer ? "open" : ""}`}><header><strong>EXPLORER</strong><span>•••</span></header><Explorer modules={modules} active={activeId} srcOpen={srcOpen} onToggle={() => setSrcOpen((open) => !open)} onOpen={openModule}/><footer><span>main*</span><span>● online</span></footer></aside>
+    <main className="cp-editor"><div className="cp-tab"><FileIcon language={active.language}/><span>{active.file}</span><b>×</b></div><div className="cp-breadcrumb">{active.path.split("/").map((part, index, all) => <span key={`${part}-${index}`}>{part}{index < all.length - 1 && <b>›</b>}</span>)}</div><div className="cp-scroll"><ModuleDocument module={active} onOpen={openModule} selectedFocus={selectedFocus} onFocus={setSelectedFocus}/><Inspector module={active} compact onOpen={openModule}/></div><div className="cp-statusbar"><span>main*</span><span>portfolio-chat</span><span>TypeScript</span><span>Cloudflare Workers</span></div></main>
+    <Inspector module={active} onOpen={openModule}/>
+  </div>{paletteOpen && <CommandPalette modules={modules} onClose={() => setPaletteOpen(false)} onOpen={openModule}/>}</Layout>;
 }
