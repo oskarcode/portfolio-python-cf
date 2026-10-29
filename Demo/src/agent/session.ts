@@ -446,6 +446,7 @@ export class PortfolioSession extends DurableObject<Env> {
   async deleteWorkspace(): Promise<void> {
     await this.#ready;
     await this.#harness.close(BACKGROUND_CONTEXT);
+    await this.ctx.storage.deleteAlarm();
     await this.ctx.storage.deleteAll();
   }
 }

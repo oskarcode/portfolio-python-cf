@@ -8,6 +8,7 @@ import { bookingIcs } from "../src/calendar/ics";
 import { createOwnerTools } from "../src/agent/tools";
 import { createScheduleTools } from "../src/agent/scheduling";
 import { createSlot } from "../src/data/calendar";
+import { deleteWorkspaceRecord } from "../src/data/leads";
 import { listAdminWorkspaces } from "../src/data/workspaces";
 
 describe("API boundaries", () => {
@@ -61,6 +62,40 @@ describe("admin workspace catalog", () => {
     expect(workspaces).toHaveLength(10);
     expect(workspaces.filter((workspace) => workspace.kind === "managed")).toHaveLength(3);
     expect(workspaces.filter((workspace) => workspace.kind === "visitor")).toHaveLength(7);
+  });
+
+  it("deletes a managed workspace Durable Object and D1 records", async () => {
+    let durableDeleted = false;
+    let batchSql: string[] = [];
+    const db = {
+      prepare: (sql: string) => ({ bind: () => ({ sql, first: async () => sql.includes("admin_workspaces") ? { id: "managed-1", title: "Managed", purpose: "Test", status: "active" } : null }) }),
+      batch: async (statements: Array<{ sql: string }>) => { batchSql = statements.map((statement) => statement.sql); return []; },
+    } as unknown as D1Database;
+    const env = {
+      DB: db,
+      PORTFOLIO_SESSION: { getByName: () => ({ deleteWorkspace: async () => { durableDeleted = true; } }) },
+    } as unknown as Env;
+
+    const response = await app.request("http://localhost/api/admin/workspaces/managed-1", { method: "DELETE" }, env);
+    expect(response.status).toBe(204);
+    expect(durableDeleted).toBe(true);
+    expect(batchSql.some((sql) => sql.includes("DELETE FROM workspace_capabilities"))).toBe(true);
+    expect(batchSql.some((sql) => sql.includes("DELETE FROM admin_workspaces"))).toBe(true);
+  });
+
+  it("removes visitor workspace attachments while preserving standalone booking records", async () => {
+    let batchSql: string[] = [];
+    const db = {
+      prepare: (sql: string) => ({ bind: () => ({ sql }) }),
+      batch: async (statements: Array<{ sql: string }>) => { batchSql = statements.map((statement) => statement.sql); return []; },
+    } as unknown as D1Database;
+    await deleteWorkspaceRecord(db, "visitor-1");
+    expect(batchSql).toEqual(expect.arrayContaining([
+      expect.stringContaining("UPDATE calendar_bookings SET workspace_id = NULL"),
+      expect.stringContaining("DELETE FROM workspace_capabilities"),
+      expect.stringContaining("DELETE FROM workspace_participants"),
+      expect.stringContaining("DELETE FROM leads"),
+    ]));
   });
 });
 

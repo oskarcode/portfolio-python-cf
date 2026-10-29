@@ -49,6 +49,14 @@ export async function managedWorkspace(db: D1Database, id: string): Promise<{ id
   return db.prepare("SELECT id, title, purpose, status FROM admin_workspaces WHERE id = ?").bind(id).first();
 }
 
+/** Permanently remove one managed workspace catalog record and all D1 capability attachments. */
+export async function deleteManagedWorkspaceRecord(db: D1Database, workspaceId: string): Promise<void> {
+  await db.batch([
+    db.prepare("DELETE FROM workspace_capabilities WHERE workspace_id = ?").bind(workspaceId),
+    db.prepare("DELETE FROM admin_workspaces WHERE id = ?").bind(workspaceId),
+  ]);
+}
+
 /**
  * Input:
  * - The typed parameters shown in the function signature.

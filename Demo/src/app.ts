@@ -11,7 +11,7 @@ import {
 import { anonymousChat } from "./agent/anonymous";
 import type { BlogPost, ChatMessage, Lead, SiteSection } from "./shared/types";
 import type { SaveSkillInput } from "./skills/types";
-import { createAdminWorkspace, listAdminWorkspaces, managedWorkspace, saveWorkspaceCapabilities, workspaceCapabilities } from "./data/workspaces";
+import { createAdminWorkspace, deleteManagedWorkspaceRecord, listAdminWorkspaces, managedWorkspace, saveWorkspaceCapabilities, workspaceCapabilities } from "./data/workspaces";
 import type { WorkspaceCapabilities } from "./shared/types";
 import { notifyOwnerOfBooking, notifyOwnerOfHandoff, sendBookingConfirmation } from "./notifications/email";
 import { bookingIcs } from "./calendar/ics";
@@ -573,10 +573,13 @@ app.post("/api/admin/workspaces/:id/restore", async (c) => {
  */
 app.delete("/api/admin/workspaces/:id", async (c) => {
   const workspaceId = c.req.param("id");
-  const lead = await workspaceRecord(c.env.DB, workspaceId);
-  if (!lead) return c.json({ error: "Workspace not found" }, 404);
+  const [managed, lead] = await Promise.all([managedWorkspace(c.env.DB, workspaceId), workspaceRecord(c.env.DB, workspaceId)]);
+  if (!managed && !lead) return c.json({ error: "Workspace not found" }, 404);
+
+  // Delete durable state first. If that fails, retain the catalog record so the owner can retry.
   await c.env.PORTFOLIO_SESSION.getByName(workspaceId).deleteWorkspace();
-  await deleteWorkspaceRecord(c.env.DB, workspaceId);
+  if (managed) await deleteManagedWorkspaceRecord(c.env.DB, workspaceId);
+  else await deleteWorkspaceRecord(c.env.DB, workspaceId);
   return c.body(null, 204);
 });
 /**

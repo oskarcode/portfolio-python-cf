@@ -138,6 +138,9 @@ export async function restoreWorkspace(db: D1Database, workspaceId: string): Pro
  */
 export async function deleteWorkspaceRecord(db: D1Database, workspaceId: string): Promise<void> {
   await db.batch([
+    // Confirmed appointments remain calendar records, but no longer point at a deleted workspace.
+    db.prepare("UPDATE calendar_bookings SET workspace_id = NULL, updated_at = CURRENT_TIMESTAMP WHERE workspace_id = ?").bind(workspaceId),
+    db.prepare("DELETE FROM workspace_capabilities WHERE workspace_id = ?").bind(workspaceId),
     db.prepare("DELETE FROM workspace_participants WHERE workspace_id = ?").bind(workspaceId),
     db.prepare("DELETE FROM leads WHERE workspace_id = ?").bind(workspaceId),
   ]);
