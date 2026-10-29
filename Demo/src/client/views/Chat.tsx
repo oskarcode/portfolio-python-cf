@@ -1,15 +1,22 @@
 // Application ownership: Anonymous and durable visitor chat UI, routing, polling, and handoff.
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { api } from "../api";
-import type { ChatMessage, WorkspaceMessage } from "../../shared/types";
+import type { CalendarSlot, ChatMessage, WorkspaceMessage } from "../../shared/types";
 import { ChatResponse, responseActions } from "../components/ChatResponse";
-import { ChatCalendar } from "../components/ChatCalendar";
 
 type DisplayMessage = ChatMessage & {
   sender?: WorkspaceMessage["sender"];
   senderName?: string;
   audience?: WorkspaceMessage["audience"];
 };
+
+type BookingFlow =
+  | { step: "slot"; slots: CalendarSlot[] }
+  | { step: "name"; slot: CalendarSlot }
+  | { step: "email"; slot: CalendarSlot; name: string }
+  | { step: "topic"; slot: CalendarSlot; name: string; email: string };
+
+const formatSlot = (value: string) => new Intl.DateTimeFormat(undefined, { weekday: "long", month: "long", day: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short" }).format(new Date(value));
 
 const suggestions = [
   "Give me a quick overview of Oskar’s profile.",
@@ -49,7 +56,7 @@ export function Chat() {
   const [input, setInput] = useState(starterPrompt);
   const [busy, setBusy] = useState(false);
   const [handoff, setHandoff] = useState(false);
-  const [calendar, setCalendar] = useState(new URLSearchParams(window.location.search).has("calendar"));
+  const [bookingFlow, setBookingFlow] = useState<BookingFlow | null>(null);
   const [contact, setContact] = useState({ name: "", email: "", company: "", intent: "" });
   const end = useRef<HTMLDivElement>(null);
 
@@ -66,9 +73,45 @@ export function Chat() {
   }, [workspaceId]);
 
   const send = async (text: string) => {
-    if (!text.trim() || busy) return;
-    if (/\b(check|show|book|schedule|see)\b.*\b(availability|available|calendar|consultation|meeting|time)\b/i.test(text)) {
-      setCalendar(true); setInput(""); return;
+    const answer = text.trim();
+    if (!answer || busy) return;
+    if (bookingFlow) {
+      const userMessage: DisplayMessage = { role: "user", sender: "visitor", senderName: "You", content: answer };
+      setInput("");
+      if (/^(cancel|stop|never mind)$/i.test(answer)) { setBookingFlow(null); setMessages((value) => [...value, userMessage, { role: "assistant", sender: "agent", senderName: "Portfolio Agent", content: "No problem — I cancelled the booking process. No time was reserved." }]); return; }
+      if (bookingFlow.step === "slot") {
+        const selected = bookingFlow.slots[Number.parseInt(answer, 10) - 1];
+        if (!selected) { setMessages((value) => [...value, userMessage, { role: "assistant", sender: "agent", senderName: "Portfolio Agent", content: `Please reply with a number from 1 to ${bookingFlow.slots.length}, or type **cancel**.` }]); return; }
+        setBookingFlow({ step: "name", slot: selected });
+        setMessages((value) => [...value, userMessage, { role: "assistant", sender: "agent", senderName: "Portfolio Agent", content: `Great — **${formatSlot(selected.startsAt)}**. What name should I put on the meeting?` }]); return;
+      }
+      if (bookingFlow.step === "name") {
+        setBookingFlow({ step: "email", slot: bookingFlow.slot, name: answer.slice(0, 120) });
+        setMessages((value) => [...value, userMessage, { role: "assistant", sender: "agent", senderName: "Portfolio Agent", content: "What email address should receive the confirmation and calendar reminder?" }]); return;
+      }
+      if (bookingFlow.step === "email") {
+        if (!answer.match(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)) { setMessages((value) => [...value, userMessage, { role: "assistant", sender: "agent", senderName: "Portfolio Agent", content: "That email address does not look complete. Please enter a valid address, or type **cancel**." }]); return; }
+        setBookingFlow({ step: "topic", slot: bookingFlow.slot, name: bookingFlow.name, email: answer.slice(0, 254) });
+        setMessages((value) => [...value, userMessage, { role: "assistant", sender: "agent", senderName: "Portfolio Agent", content: "Finally, what would you like to discuss with Oskar?" }]); return;
+      }
+      setMessages((value) => [...value, userMessage]); setBusy(true);
+      try {
+        const result = await api.bookCalendarSlot({ slotId: bookingFlow.slot.id, workspaceId: workspaceId ?? undefined, name: bookingFlow.name, email: bookingFlow.email, topic: answer });
+        setBookingFlow(null);
+        setMessages((value) => [...value, { role: "assistant", sender: "agent", senderName: "Portfolio Agent", content: `**Your meeting is confirmed.**\n\n**When:** ${formatSlot(result.booking.startsAt)}\n\n**Topic:** ${result.booking.topic}\n\nA confirmation email is being sent to **${result.booking.email}**, and Oskar has been notified. [Add the meeting to your calendar with a 24-hour reminder](${result.calendarUrl}).` }]);
+      } catch (error) { setBookingFlow(null); setMessages((value) => [...value, { role: "assistant", sender: "agent", senderName: "Portfolio Agent", content: `I couldn’t reserve that time: ${error instanceof Error ? error.message : "Please try again."}` }]); }
+      finally { setBusy(false); }
+      return;
+    }
+    if (/\b(check|show|book|schedule|see|want)\b.*\b(availability|available|calendar|consultation|meeting|time)\b/i.test(answer)) {
+      setMessages((value) => [...value, { role: "user", sender: "visitor", senderName: "You", content: answer }]); setInput(""); setBusy(true);
+      try {
+        const { slots } = await api.calendarSlots();
+        if (slots.length === 0) setMessages((value) => [...value, { role: "assistant", sender: "agent", senderName: "Portfolio Agent", content: "Oskar does not have any public consultation times open right now. You can use **Add Oskar** to request another time." }]);
+        else { setBookingFlow({ step: "slot", slots }); setMessages((value) => [...value, { role: "assistant", sender: "agent", senderName: "Portfolio Agent", content: `Here are Oskar’s available times in your timezone:\n\n${slots.map((slot, index) => `${index + 1}. **${formatSlot(slot.startsAt)}** · ${Math.round((new Date(slot.endsAt).valueOf() - new Date(slot.startsAt).valueOf()) / 60_000)} minutes`).join("\n")}\n\nReply with the **number** you want, or type **cancel**.` }]); }
+      } catch (error) { setMessages((value) => [...value, { role: "assistant", sender: "agent", senderName: "Portfolio Agent", content: `I couldn’t load availability: ${error instanceof Error ? error.message : "Please try again."}` }]); }
+      finally { setBusy(false); }
+      return;
     }
     if (!workspaceId && /\b(add|talk to|contact|include|meet)\s+(oskar|him|you)\b/i.test(text)) {
       setContact((value) => ({ ...value, intent: text }));
@@ -121,9 +164,8 @@ export function Chat() {
         })}{busy && <div className="message assistant agent"><span>{workspaceId && recipient === "owner" ? "SENDING" : "AGENT"}</span><div className="thinking">{workspaceId && recipient === "owner" ? "Delivering to Oskar" : "Thinking"}<span>…</span></div></div>}<div ref={end}/></div>
         {!workspaceId && messages.length <= 2 && <div className="suggestions">{suggestions.map((value) => <button onClick={() => void send(value)} key={value}>{value}<span>→</span></button>)}</div>}
         {workspaceId && <div className="recipient-switch" role="group" aria-label="Message recipient"><button type="button" className={recipient === "owner" ? "active" : ""} onClick={() => setRecipient("owner")}><strong>Message Oskar</strong><span>No agent response</span></button><button type="button" className={recipient === "agent" ? "active" : ""} onClick={() => setRecipient("agent")}><strong>Ask the agent</strong><span>Get an immediate answer</span></button></div>}
-        <form className="composer" onSubmit={submit}><textarea value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void send(input); } }} placeholder={workspaceId ? (recipient === "owner" ? "Write a message to Oskar…" : "Ask the portfolio agent…") : "Ask a question or describe what you need…"} rows={2}/><div><button type="button" className="add-oskar" onClick={() => setCalendar(true)}>Calendar</button>{workspaceId ? <button type="button" className="add-oskar" onClick={() => void navigator.clipboard.writeText(window.location.href)}>Copy workspace link</button> : <button type="button" className="add-oskar" onClick={() => setHandoff(true)}>+ Add Oskar</button>}<button className="send-button" disabled={busy || !input.trim()} aria-label="Send">↑</button></div></form>
+        <form className="composer" onSubmit={submit}><textarea value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void send(input); } }} placeholder={workspaceId ? (recipient === "owner" ? "Write a message to Oskar…" : "Ask the portfolio agent…") : "Ask a question or describe what you need…"} rows={2}/><div>{workspaceId ? <button type="button" className="add-oskar" onClick={() => void navigator.clipboard.writeText(window.location.href)}>Copy workspace link</button> : <button type="button" className="add-oskar" onClick={() => setHandoff(true)}>+ Add Oskar</button>}<button className="send-button" disabled={busy || !input.trim()} aria-label="Send">↑</button></div></form>
       </section></div>
-    {calendar && <div className="modal-backdrop calendar-backdrop"><ChatCalendar workspaceId={workspaceId} onClose={() => setCalendar(false)}/></div>}
     {handoff && <div className="modal-backdrop"><form className="handoff-modal" onSubmit={createHandoff}><button type="button" className="modal-close" onClick={() => setHandoff(false)}>×</button><span className="eyebrow">ADD OSKAR</span><h2>Turn this into a shared workspace</h2><p>Your conversation will become persistent and visible to Oskar. You can return with the private workspace link and choose whether each message goes to Oskar or the agent.</p><label>Name<input required value={contact.name} onChange={(e) => setContact({ ...contact, name: e.target.value })}/></label><label>Email<input required type="email" value={contact.email} onChange={(e) => setContact({ ...contact, email: e.target.value })}/></label><label>Company <small>optional</small><input value={contact.company} onChange={(e) => setContact({ ...contact, company: e.target.value })}/></label><label>What would you like help with?<textarea required value={contact.intent} onChange={(e) => setContact({ ...contact, intent: e.target.value })}/></label><label className="consent"><input required type="checkbox"/> I consent to save and share this conversation with Oskar.</label><button className="button primary" disabled={busy}>Create shared workspace</button></form></div>}
   </div>;
 }
