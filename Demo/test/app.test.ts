@@ -5,6 +5,8 @@ import { OWNER_PROMPT, VISITOR_PROMPT } from "../src/agent/prompt";
 import { createSkillTools, type SkillHubCaller } from "../src/skills/tools";
 import { notifyOwnerOfBooking, notifyOwnerOfHandoff, sendBookingConfirmation } from "../src/notifications/email";
 import { bookingIcs } from "../src/calendar/ics";
+import { createOwnerTools } from "../src/agent/tools";
+import { createSlot } from "../src/data/calendar";
 import { listAdminWorkspaces } from "../src/data/workspaces";
 
 describe("API boundaries", () => {
@@ -113,6 +115,22 @@ describe("agent controls", () => {
     expect(VISITOR_PROMPT).toContain("Never execute arbitrary commands");
     expect(OWNER_PROMPT).toContain("private portfolio content agent");
     expect(OWNER_PROMPT).toContain("Never invent credentials");
+    expect(OWNER_PROMPT).toContain("add, reschedule, or cancel open availability");
+    expect(OWNER_PROMPT).toContain("require Oskar's explicit confirmation");
+  });
+
+  it("gives the owner agent consultation calendar management tools", () => {
+    const names = createOwnerTools({} as D1Database).map((tool) => tool.name);
+    expect(names).toEqual(expect.arrayContaining([
+      "admin_list_calendar",
+      "admin_create_calendar_slot",
+      "admin_reschedule_calendar_slot",
+      "admin_cancel_calendar_slot",
+    ]));
+  });
+
+  it("rejects invalid agent-created availability before accessing D1", async () => {
+    await expect(createSlot({} as D1Database, "not-a-date", "also-not-a-date")).rejects.toThrow("Choose a future start");
   });
 
   it("allows visitor agents to use approved skills without authoring them", () => {

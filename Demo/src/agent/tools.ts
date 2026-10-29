@@ -3,7 +3,7 @@ import { Type } from "@earendil-works/pi-ai";
 import { defineTool } from "@earendil-works/pi-durable";
 import { getSection, listSections, saveSection } from "../data/content";
 import { getPost, listPosts, savePost } from "../data/blog";
-import { createBooking, listOpenSlots } from "../data/calendar";
+import { cancelSlot, createBooking, createSlot, listCalendar, listOpenSlots, rescheduleSlot } from "../data/calendar";
 import { notifyOwnerOfBooking, sendBookingConfirmation } from "../notifications/email";
 
 const output = (value: unknown) => ({ output: [{ type: "text" as const, text: JSON.stringify(value) }] });
@@ -98,5 +98,32 @@ export function createOwnerTools(db: D1Database) {
     }),
     execute: async ({ summary, ...args }) => output(await savePost(db, { ...args, excerpt: summary }, "owner-agent")),
   });
-  return [listAll, upsertSection, upsertPost] as const;
+  const listAdminCalendar = defineTool({
+    name: "admin_list_calendar",
+    description: "List upcoming consultation availability and confirmed bookings, including visitor details. This is private owner-only calendar data.",
+    parameters: Type.Object({}), replay: "safe",
+    execute: async () => output(await listCalendar(db)),
+  });
+  const addCalendarSlot = defineTool({
+    name: "admin_create_calendar_slot",
+    description: "Add one bookable consultation time after Oskar confirms the exact start and end. Use ISO 8601 timestamps with an explicit timezone. This writes immediately.",
+    parameters: Type.Object({ startsAt: Type.String(), endsAt: Type.String() }),
+    execute: async ({ startsAt, endsAt }) => output(await createSlot(db, startsAt, endsAt)),
+  });
+  const editCalendarSlot = defineTool({
+    name: "admin_reschedule_calendar_slot",
+    description: "Move one open consultation time after Oskar confirms the slot ID and exact replacement time. Booked and cancelled slots cannot be changed. This writes immediately.",
+    parameters: Type.Object({ slotId: Type.String(), startsAt: Type.String(), endsAt: Type.String() }),
+    execute: async ({ slotId, startsAt, endsAt }) => output(await rescheduleSlot(db, slotId, startsAt, endsAt)),
+  });
+  const removeCalendarSlot = defineTool({
+    name: "admin_cancel_calendar_slot",
+    description: "Remove one open consultation time after Oskar explicitly confirms the slot ID. Confirmed bookings cannot be cancelled with this tool. This writes immediately.",
+    parameters: Type.Object({ slotId: Type.String() }),
+    execute: async ({ slotId }) => {
+      if (!(await cancelSlot(db, slotId))) throw new Error("Only open consultation times can be cancelled.");
+      return output({ cancelled: true, slotId });
+    },
+  });
+  return [listAll, upsertSection, upsertPost, listAdminCalendar, addCalendarSlot, editCalendarSlot, removeCalendarSlot] as const;
 }

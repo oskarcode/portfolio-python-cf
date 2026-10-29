@@ -24,6 +24,17 @@ const slot = (row: SlotRow): CalendarSlot => ({ id: row.id, startsAt: row.starts
  */
 const booking = (row: BookingRow): CalendarBooking => ({ id: row.id, slotId: row.slot_id, workspaceId: row.workspace_id, name: row.name, email: row.email, topic: row.topic, status: row.status, startsAt: row.starts_at, endsAt: row.ends_at, createdAt: row.created_at });
 
+/** Validate and normalize agent- or browser-supplied availability before it reaches D1. */
+const availabilityRange = (startsAt: string, endsAt: string): { startsAt: string; endsAt: string } => {
+  const hasTimezone = (value: string) => /(?:Z|[+-]\d{2}:\d{2})$/i.test(value);
+  const starts = new Date(startsAt);
+  const ends = new Date(endsAt);
+  if (!hasTimezone(startsAt) || !hasTimezone(endsAt) || Number.isNaN(starts.valueOf()) || Number.isNaN(ends.valueOf()) || starts <= new Date() || ends <= starts || ends.valueOf() - starts.valueOf() > 8 * 60 * 60 * 1_000) {
+    throw new Error("Choose a future start and an end no more than eight hours later, both with an explicit timezone.");
+  }
+  return { startsAt: starts.toISOString(), endsAt: ends.toISOString() };
+};
+
 /**
  * Input:
  * - The typed values shown in listOpenSlots’s signature.
@@ -62,11 +73,22 @@ export async function listCalendar(db: D1Database): Promise<{ slots: CalendarSlo
  * - It rejects overlap, creates one open slot, and returns its public shape.
  */
 export async function createSlot(db: D1Database, startsAt: string, endsAt: string): Promise<CalendarSlot> {
-  const overlap = await db.prepare("SELECT id FROM calendar_slots WHERE status != 'cancelled' AND datetime(starts_at) < datetime(?) AND datetime(ends_at) > datetime(?) LIMIT 1").bind(endsAt, startsAt).first();
+  const range = availabilityRange(startsAt, endsAt);
+  const overlap = await db.prepare("SELECT id FROM calendar_slots WHERE status != 'cancelled' AND datetime(starts_at) < datetime(?) AND datetime(ends_at) > datetime(?) LIMIT 1").bind(range.endsAt, range.startsAt).first();
   if (overlap) throw new Error("That time overlaps an existing calendar slot.");
   const id = crypto.randomUUID();
-  await db.prepare("INSERT INTO calendar_slots (id, starts_at, ends_at) VALUES (?, ?, ?)").bind(id, startsAt, endsAt).run();
-  return { id, startsAt, endsAt, status: "open" };
+  await db.prepare("INSERT INTO calendar_slots (id, starts_at, ends_at) VALUES (?, ?, ?)").bind(id, range.startsAt, range.endsAt).run();
+  return { id, ...range, status: "open" };
+}
+
+/** Move an open slot while preserving its identity; confirmed or cancelled slots are immutable. */
+export async function rescheduleSlot(db: D1Database, id: string, startsAt: string, endsAt: string): Promise<CalendarSlot> {
+  const range = availabilityRange(startsAt, endsAt);
+  const overlap = await db.prepare("SELECT id FROM calendar_slots WHERE id != ? AND status != 'cancelled' AND datetime(starts_at) < datetime(?) AND datetime(ends_at) > datetime(?) LIMIT 1").bind(id, range.endsAt, range.startsAt).first();
+  if (overlap) throw new Error("That time overlaps an existing calendar slot.");
+  const result = await db.prepare("UPDATE calendar_slots SET starts_at = ?, ends_at = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'open'").bind(range.startsAt, range.endsAt, id).run();
+  if (result.meta.changes === 0) throw new Error("Only open consultation times can be rescheduled.");
+  return { id, ...range, status: "open" };
 }
 
 /**
