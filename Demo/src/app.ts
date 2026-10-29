@@ -257,6 +257,10 @@ app.post("/api/workspaces/:id/messages", async (c) => {
 });
 
 app.use("/api/admin/*", requireAdmin);
+app.use("/api/admin/*", async (c, next) => {
+  await next();
+  c.header("Cache-Control", "private, no-store");
+});
 /**
  * Input:
  * - GET /api/admin/me with path, query, or JSON values defined in the handler.

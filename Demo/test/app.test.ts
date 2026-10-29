@@ -5,6 +5,7 @@ import { OWNER_PROMPT, VISITOR_PROMPT } from "../src/agent/prompt";
 import { createSkillTools, type SkillHubCaller } from "../src/skills/tools";
 import { notifyOwnerOfBooking, notifyOwnerOfHandoff, sendBookingConfirmation } from "../src/notifications/email";
 import { bookingIcs } from "../src/calendar/ics";
+import { listAdminWorkspaces } from "../src/data/workspaces";
 
 describe("API boundaries", () => {
   it("protects admin APIs when Cloudflare Access identity is absent", async () => {
@@ -42,6 +43,21 @@ describe("API boundaries", () => {
     const response = await app.request("https://portfolio.example.com/api/missing", {}, {} as Env);
     expect(response.status).toBe(404);
     expect(await response.json()).toEqual({ error: "Not found" });
+  });
+});
+
+describe("admin workspace catalog", () => {
+  it("returns every managed and visitor workspace without truncation", async () => {
+    const managed = Array.from({ length: 3 }, (_, index) => ({ id: `managed-${index}`, title: `Managed ${index}`, purpose: "Content", status: "active" as const, updated_at: `2030-01-0${index + 1}` }));
+    const visitors = Array.from({ length: 7 }, (_, index) => ({ workspace_id: `visitor-${index}`, name: `Visitor ${index}`, email: `visitor${index}@example.com`, intent: "Consultation", workspace_status: "active" as const, updated_at: `2030-02-0${index + 1}` }));
+    const db = {
+      prepare: (sql: string) => ({ all: async () => ({ results: sql.includes("admin_workspaces") ? managed : visitors }) }),
+    } as unknown as D1Database;
+
+    const workspaces = await listAdminWorkspaces(db);
+    expect(workspaces).toHaveLength(10);
+    expect(workspaces.filter((workspace) => workspace.kind === "managed")).toHaveLength(3);
+    expect(workspaces.filter((workspace) => workspace.kind === "visitor")).toHaveLength(7);
   });
 });
 
