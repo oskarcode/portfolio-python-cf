@@ -106,5 +106,3 @@ export interface CalendarBooking {
   endsAt: string;
   createdAt: string;
 }
-
-export const BOOKING_URL = "https://calendar.google.com/calendar/appointments/schedules/AcZssZ1xHKYdvcfsUs7Oj4wKIW8UOZmpNdOAyNYtDq0vI_WNlV_m_vuKA7QkDmlNYhgmXGHueVxGDPgw?gv=true";

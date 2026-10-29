@@ -107,7 +107,7 @@ npm audit --omit=dev
    - D1 `database_id` and `database_name`
    - R2 `bucket_name`
    - `AI_GATEWAY_ID`
-   - `BOOKING_URL`
+   - `PUBLIC_URL`
 2. Preserve the Durable Object migration history. Add a new migration tag instead of editing old tags.
 3. Create the D1 database, R2 bucket, AI Gateway, and Cloudflare Access application.
 4. Apply and deploy:
