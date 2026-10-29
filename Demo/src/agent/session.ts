@@ -272,6 +272,29 @@ export class PortfolioSession extends DurableObject<Env> {
    * Output:
    * - The declared return value or Promise; thrown errors follow the caller.
    * What this function does:
+   * - It writes a trusted system-generated agent message into the persistent workspace transcript.
+   */
+  async recordAgentMessage(content: string): Promise<void> {
+    const text = content.trim().slice(0, 16_000);
+    if (!text) return;
+    const conversation = await this.#conversation(false);
+    const submission = await conversation.submit({
+      type: "write",
+      entry: {
+        kind: WorkspaceMessageEntry.kind,
+        data: { text, sender: "agent", senderName: "Portfolio Agent", audience: "all", timestamp: Date.now() },
+      },
+      requestId: crypto.randomUUID(),
+    }, BACKGROUND_CONTEXT);
+    await submission.wait(BACKGROUND_CONTEXT);
+  }
+
+  /**
+   * Input:
+   * - The typed parameters shown in the function signature.
+   * Output:
+   * - The declared return value or Promise; thrown errors follow the caller.
+   * What this function does:
    * - It opens required durable resources and runtime registrations.
    */
   async initializeWorkspace(transcript: ChatMessage[], visitorName: string, intent: string): Promise<{ answer: string }> {

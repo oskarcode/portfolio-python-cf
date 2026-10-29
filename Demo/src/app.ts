@@ -120,16 +120,24 @@ app.get("/api/calendar/bookings/:id/calendar.ics", async (c) => {
 });
 
 app.post("/api/calendar/bookings", async (c) => {
-  const input = await c.req.json<{ slotId?: string; workspaceId?: string; name?: string; email?: string; topic?: string }>();
-  if (!input.slotId || !input.name?.trim() || !input.email?.match(/^[^\s@]+@[^\s@]+\.[^\s@]+$/) || !input.topic?.trim()) return c.json({ error: "A time, name, valid email, and topic are required" }, 400);
+  const input = await c.req.json<{ slotId?: string; workspaceId?: string }>();
+  if (!input.slotId || !input.workspaceId) return c.json({ error: "A persistent workspace and consultation time are required" }, 400);
+  const lead = await workspaceRecord(c.env.DB, input.workspaceId);
+  if (!lead) return c.json({ error: "Workspace not found" }, 404);
+  if (lead.workspaceStatus === "archived") return c.json({ error: "This workspace has been archived" }, 410);
   try {
-    const value = await createBooking(c.env.DB, { slotId: input.slotId, workspaceId: input.workspaceId, name: input.name.trim().slice(0, 120), email: input.email.trim().slice(0, 254), topic: input.topic.trim().slice(0, 1_000) });
+    const value = await createBooking(c.env.DB, { slotId: input.slotId, workspaceId: input.workspaceId, name: lead.name, email: lead.email, topic: lead.intent });
+    const calendarUrl = `/api/calendar/bookings/${value.id}/calendar.ics`;
+    const confirmation = `**Your meeting is confirmed.**\n\n**When:** ${value.startsAt}\n\n**Topic:** ${value.topic}\n\nA confirmation email is being sent to **${value.email}**, and Oskar has been notified. [Join the Google Meet](${c.env.MEETING_URL}) or [add the meeting to your calendar with a 24-hour reminder](${calendarUrl}).`;
+    await c.env.PORTFOLIO_SESSION.getByName(input.workspaceId).recordAgentMessage(confirmation).catch((error: unknown) => {
+      console.error(JSON.stringify({ event: "booking_transcript_write_failed", bookingId: value.id, workspaceId: input.workspaceId, error: error instanceof Error ? error.message : String(error) }));
+    });
     const emailInput = { ...value, bookingId: value.id, origin: new URL(c.req.url).origin, meetingUrl: c.env.MEETING_URL };
     c.executionCtx.waitUntil(Promise.all([
       notifyOwnerOfBooking(c.env, emailInput).catch((error: unknown) => console.error(JSON.stringify({ event: "booking_owner_notification_failed", bookingId: value.id, error: error instanceof Error ? error.message : String(error) }))),
       sendBookingConfirmation(c.env, emailInput).catch((error: unknown) => console.error(JSON.stringify({ event: "booking_confirmation_failed", bookingId: value.id, error: error instanceof Error ? error.message : String(error) }))),
     ]).then(() => undefined));
-    return c.json({ booking: value, calendarUrl: `/api/calendar/bookings/${value.id}/calendar.ics`, meetingUrl: c.env.MEETING_URL }, 201);
+    return c.json({ booking: value, calendarUrl, meetingUrl: c.env.MEETING_URL }, 201);
   } catch (error) {
     return c.json({ error: error instanceof Error ? error.message : "Could not book this time" }, 409);
   }

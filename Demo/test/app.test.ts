@@ -28,6 +28,16 @@ describe("API boundaries", () => {
     expect(await response.json()).toEqual({ error: "recipient must be owner or agent" });
   });
 
+  it("requires a persistent workspace before a consultation can be booked", async () => {
+    const response = await app.request("https://portfolio.example.com/api/calendar/bookings", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ slotId: "slot-1" }),
+    }, {} as Env);
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ error: "A persistent workspace and consultation time are required" });
+  });
+
   it("returns a JSON 404 for unknown API routes", async () => {
     const response = await app.request("https://portfolio.example.com/api/missing", {}, {} as Env);
     expect(response.status).toBe(404);
