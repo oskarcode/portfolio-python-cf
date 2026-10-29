@@ -19,14 +19,14 @@ type BookingFlow =
 const formatSlot = (value: string) => new Intl.DateTimeFormat(undefined, { weekday: "long", month: "long", day: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short" }).format(new Date(value));
 
 const suggestions = [
-  "Give me a quick overview of Oskar’s profile.",
-  "What are Oskar’s main areas of expertise?",
-  "How can Oskar help through consulting?",
-  "Recommend a technical article from Oskar’s blog.",
-  "Show me Oskar’s most relevant agentic AI projects.",
-  "Tell me about Oskar’s graduate cloud computing course.",
-  "I want to check availability for a technical sales consultation.",
-  "I want to add Oskar and start a persistent conversation.",
+  { label: "Profile", prompt: "Give me a quick overview of Oskar’s profile.", href: "/#profile" },
+  { label: "Main expertise", prompt: "What are Oskar’s main areas of expertise?", href: "/#expertise" },
+  { label: "Selected work", prompt: "Summarize Oskar’s selected technical work and recommend the most relevant project.", href: "/#work" },
+  { label: "Experience", prompt: "Summarize Oskar’s professional experience and career progression.", href: "/#experience" },
+  { label: "Teaching", prompt: "Tell me about Oskar’s graduate cloud computing course.", href: "/#teaching" },
+  { label: "Writing", prompt: "Recommend a technical article from Oskar’s blog.", href: "/#writing" },
+  { label: "Consulting", prompt: "How can Oskar help through consulting?", href: "/#consulting" },
+  { label: "Contact", prompt: "I want to add Oskar and start a persistent conversation.", href: "/#contact" },
 ];
 const displayWorkspace = (message: WorkspaceMessage): DisplayMessage => ({
   role: message.sender === "visitor" ? "user" : "assistant",
@@ -175,7 +175,7 @@ export function Chat() {
           const actions = isAgent && index === messages.length - 1 ? responseActions(message.content, Boolean(workspaceId)) : [];
           return <div className={`message ${message.role} ${message.sender ?? ""}`} key={index}><span>{message.senderName ?? (message.role === "assistant" ? "AGENT" : "YOU")}{message.audience === "owner" && message.sender === "visitor" ? " → OSKAR" : ""}</span><div className="message-body">{isAgent ? <ChatResponse content={message.content}/> : message.content.split("\n").map((line, i) => <p key={i}>{line || <br/>}</p>)}{actions.length > 0 && <div className="response-actions">{actions.map((action) => action.href ? <a href={action.href} key={action.label}>{action.label} <span>→</span></a> : <button type="button" key={action.label} onClick={() => setHandoff(true)}>{action.label} <span>+</span></button>)}</div>}</div></div>;
         })}{busy && <div className="message assistant agent"><span>{workspaceId && recipient === "owner" ? "SENDING" : "AGENT"}</span><div className="thinking">{workspaceId && recipient === "owner" ? "Delivering to Oskar" : "Thinking"}<span>…</span></div></div>}<div ref={end}/></div>
-        {!workspaceId && messages.length <= 2 && <div className="suggestions">{suggestions.map((value) => <button onClick={() => void send(value)} key={value}>{value}<span>→</span></button>)}</div>}
+        {!workspaceId && messages.length <= 2 && <div className="suggestions">{suggestions.map((item) => <div className="suggestion-card" key={item.label}><button onClick={() => void send(item.prompt)}><small>{item.label}</small><span>{item.prompt}</span><b>Ask →</b></button><a href={item.href}>Open section →</a></div>)}</div>}
         {workspaceId && <div className="recipient-switch" role="group" aria-label="Message recipient"><button type="button" className={recipient === "owner" ? "active" : ""} onClick={() => setRecipient("owner")}><strong>Message Oskar</strong><span>No agent response</span></button><button type="button" className={recipient === "agent" ? "active" : ""} onClick={() => setRecipient("agent")}><strong>Ask the agent</strong><span>Get an immediate answer</span></button></div>}
         <form className="composer" onSubmit={submit}><textarea value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void send(input); } }} placeholder={workspaceId ? (recipient === "owner" ? "Write a message to Oskar…" : "Ask the portfolio agent…") : "Ask a question or describe what you need…"} rows={2}/><div>{workspaceId ? <button type="button" className="add-oskar" onClick={() => void navigator.clipboard.writeText(window.location.href)}>Copy workspace link</button> : <button type="button" className="add-oskar" onClick={() => setHandoff(true)}>+ Add Oskar</button>}<button className="send-button" disabled={busy || !input.trim()} aria-label="Send">↑</button></div></form>
       </section></div>

@@ -10,19 +10,10 @@ import type { ReactNode } from "react";
  * - It owns the Layout operation for this module.
  */
 export function Layout({ children }: { children: ReactNode }) {
-  const path = window.location.pathname;
   return <>
     <header className="site-header">
       <a className="brand" href="/"><span className="brand-mark">OA</span><span><strong>Oskar Ablimit</strong><small>Senior Customer Engineer</small></span></a>
-      <nav aria-label="Main navigation">
-        <a href="/#profile">Profile</a>
-        <a href="/#expertise">Main expertise</a>
-        <a href="/#work">Selected work</a>
-        <a href="/#experience">Experience</a>
-        <a href="/#writing">Writing</a>
-        <a href="/#consulting">Consulting</a>
-      </nav>
-      <a className={`header-blog-link ${path.startsWith("/blog") ? "active" : ""}`} href="/blog">Blog</a>
+
     </header>
     <main>{children}</main>
     <footer><div><strong>Oskar Ablimit</strong><p>Cloud · Security · AI · Solutions Engineering</p></div><div className="footer-links"><a href="https://www.linkedin.com/in/cloudflareoskar/">LinkedIn</a><a href="https://github.com/oskarcode">GitHub</a><a href="/blog">Technical writing</a><a href="/chat?prompt=Help%20me%20explore%20Oskar%E2%80%99s%20portfolio%20and%20find%20the%20most%20relevant%20place%20to%20start.">Chat</a></div></footer>
