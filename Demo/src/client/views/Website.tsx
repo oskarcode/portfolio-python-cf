@@ -268,7 +268,7 @@ function BlockRenderer({ block }: { block: ContentBlock }) {
 }
 
 function ModuleDocument({ module }: { module: PortfolioModule }) {
-  return <article className={`cp-document ${module.id === "chat" ? "chat-document" : ""}`}>{module.id === "chat" && <section className="cp-entry-choice" aria-labelledby="explore-choice"><div><span>WELCOME</span><h2 id="explore-choice">How would you like to explore?</h2><p>Choose the fastest path. Ask for a guided answer, or read the source-backed portfolio yourself.</p></div><div><a className="primary" href={chatHref(CHAT_PROMPTS.start)}><span aria-hidden="true">◌</span><div><strong>Ask the portfolio chat</strong><small>Get a concise, guided answer</small></div><b>→</b></a><a href="#portfolio-source"><span aria-hidden="true">TS</span><div><strong>Read the portfolio</strong><small>Browse the code and text below</small></div><b>↓</b></a></div></section>}<span className="cp-kicker" id={module.id === "chat" ? "portfolio-source" : undefined}>{module.kicker}</span><h1>{module.title}</h1><p className="cp-lead">{module.summary}</p><CodeBlock code={module.code}/>{module.blocks.map((block, index) => <BlockRenderer block={block} key={`${block.type}-${index}`}/>)}</article>;
+  return <article className="cp-document"><span className="cp-kicker">{module.kicker}</span><h1>{module.title}</h1><p className="cp-lead">{module.summary}</p><CodeBlock code={module.code}/>{module.blocks.map((block, index) => <BlockRenderer block={block} key={`${block.type}-${index}`}/>)}</article>;
 }
 
 function CommandPalette({ modules, onClose, onOpen }: { modules: Record<ModuleId, PortfolioModule>; onClose: () => void; onOpen: (id: ModuleId) => void }) {
