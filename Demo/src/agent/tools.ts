@@ -47,7 +47,7 @@ export function createPortfolioTools(env: Pick<Env, "DB" | "NOTIFICATION_EMAIL" 
   });
   const book = defineTool({
     name: "book_consultation",
-    description: "Book one open consultation time only after the visitor explicitly chooses the exact time and confirms their name, email, and topic. Never guess or invent these values.",
+    description: "Book one open consultation time only after the visitor explicitly chooses the exact time. In a persistent workspace, use the verified handoff name, email, intent/topic, and workspaceId supplied in system context instead of asking for them again. Never guess or invent missing values.",
     parameters: Type.Object({ slotId: Type.String(), name: Type.String(), email: Type.String(), topic: Type.String(), workspaceId: Type.Optional(Type.String()) }),
     execute: async (args) => {
       const value = await createBooking(db, args);

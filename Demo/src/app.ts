@@ -18,6 +18,7 @@ import { cancelSlot, createBooking, createSlot, getBooking, listCalendar, listOp
 
 const app = new Hono<{ Bindings: Env }>();
 app.use("/api/*", cors({ origin: (origin) => origin, credentials: true }));
+app.use("/api/workspaces/*", async (c, next) => { await next(); c.header("Cache-Control", "private, no-store"); });
 
 const isLocal = (request: Request) => ["localhost", "127.0.0.1"].includes(new URL(request.url).hostname);
 const adminEmail = (request: Request) => request.headers.get("Cf-Access-Authenticated-User-Email");
@@ -190,6 +191,7 @@ app.get("/api/workspaces/:id", async (c) => {
     status: lead.workspaceStatus,
     participants: await workspaceParticipants(c.env.DB, workspaceId),
     messages: await c.env.PORTFOLIO_SESSION.getByName(workspaceId).history(),
+    bookingProfile: { name: lead.name, email: lead.email, topic: lead.intent },
   });
 });
 

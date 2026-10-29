@@ -68,6 +68,7 @@ export interface WorkspaceSnapshot {
   status: "active" | "archived";
   participants: WorkspaceParticipant[];
   messages: WorkspaceMessage[];
+  bookingProfile?: { name: string; email: string; topic: string };
 }
 
 export interface AdminWorkspaceSummary {

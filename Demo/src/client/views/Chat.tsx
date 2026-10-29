@@ -57,6 +57,7 @@ export function Chat() {
   const [busy, setBusy] = useState(false);
   const [handoff, setHandoff] = useState(false);
   const [bookingFlow, setBookingFlow] = useState<BookingFlow | null>(null);
+  const [bookingProfile, setBookingProfile] = useState<{ name: string; email: string; topic: string } | null>(null);
   const [contact, setContact] = useState({ name: "", email: "", company: "", intent: "" });
   const end = useRef<HTMLDivElement>(null);
 
@@ -65,12 +66,22 @@ export function Chat() {
     if (!workspaceId) return;
     let active = true;
     const refresh = () => api.workspaceHistory(workspaceId).then((data) => {
-      if (active) setMessages(data.messages.map(displayWorkspace));
+      if (active) { setMessages(data.messages.map(displayWorkspace)); setBookingProfile(data.bookingProfile ?? null); }
     }).catch(() => undefined);
     void refresh();
     const timer = window.setInterval(refresh, 5_000);
     return () => { active = false; window.clearInterval(timer); };
   }, [workspaceId]);
+
+  const reserveSlot = async (slot: CalendarSlot, profile: { name: string; email: string; topic: string }) => {
+    setBusy(true);
+    try {
+      const result = await api.bookCalendarSlot({ slotId: slot.id, workspaceId: workspaceId ?? undefined, ...profile });
+      setBookingFlow(null);
+      setMessages((value) => [...value, { role: "assistant", sender: "agent", senderName: "Portfolio Agent", content: `**Your meeting is confirmed.**\n\n**When:** ${formatSlot(result.booking.startsAt)}\n\n**Topic:** ${result.booking.topic}\n\nA confirmation email is being sent to **${result.booking.email}**, and Oskar has been notified. [Add the meeting to your calendar with a 24-hour reminder](${result.calendarUrl}).` }]);
+    } catch (error) { setBookingFlow(null); setMessages((value) => [...value, { role: "assistant", sender: "agent", senderName: "Portfolio Agent", content: `I couldn’t reserve that time: ${error instanceof Error ? error.message : "Please try again."}` }]); }
+    finally { setBusy(false); }
+  };
 
   const send = async (text: string) => {
     const answer = text.trim();
@@ -82,6 +93,10 @@ export function Chat() {
       if (bookingFlow.step === "slot") {
         const selected = bookingFlow.slots[Number.parseInt(answer, 10) - 1];
         if (!selected) { setMessages((value) => [...value, userMessage, { role: "assistant", sender: "agent", senderName: "Portfolio Agent", content: `Please reply with a number from 1 to ${bookingFlow.slots.length}, or type **cancel**.` }]); return; }
+        if (bookingProfile) {
+          setMessages((value) => [...value, userMessage, { role: "assistant", sender: "agent", senderName: "Portfolio Agent", content: `Great — I’ll use the name, email, and topic from your handoff form to reserve **${formatSlot(selected.startsAt)}**.` }]);
+          await reserveSlot(selected, bookingProfile); return;
+        }
         setBookingFlow({ step: "name", slot: selected });
         setMessages((value) => [...value, userMessage, { role: "assistant", sender: "agent", senderName: "Portfolio Agent", content: `Great — **${formatSlot(selected.startsAt)}**. What name should I put on the meeting?` }]); return;
       }
@@ -94,16 +109,13 @@ export function Chat() {
         setBookingFlow({ step: "topic", slot: bookingFlow.slot, name: bookingFlow.name, email: answer.slice(0, 254) });
         setMessages((value) => [...value, userMessage, { role: "assistant", sender: "agent", senderName: "Portfolio Agent", content: "Finally, what would you like to discuss with Oskar?" }]); return;
       }
-      setMessages((value) => [...value, userMessage]); setBusy(true);
-      try {
-        const result = await api.bookCalendarSlot({ slotId: bookingFlow.slot.id, workspaceId: workspaceId ?? undefined, name: bookingFlow.name, email: bookingFlow.email, topic: answer });
-        setBookingFlow(null);
-        setMessages((value) => [...value, { role: "assistant", sender: "agent", senderName: "Portfolio Agent", content: `**Your meeting is confirmed.**\n\n**When:** ${formatSlot(result.booking.startsAt)}\n\n**Topic:** ${result.booking.topic}\n\nA confirmation email is being sent to **${result.booking.email}**, and Oskar has been notified. [Add the meeting to your calendar with a 24-hour reminder](${result.calendarUrl}).` }]);
-      } catch (error) { setBookingFlow(null); setMessages((value) => [...value, { role: "assistant", sender: "agent", senderName: "Portfolio Agent", content: `I couldn’t reserve that time: ${error instanceof Error ? error.message : "Please try again."}` }]); }
-      finally { setBusy(false); }
+      setMessages((value) => [...value, userMessage]);
+      await reserveSlot(bookingFlow.slot, { name: bookingFlow.name, email: bookingFlow.email, topic: answer });
       return;
     }
-    if (/\b(check|show|book|schedule|see|want)\b.*\b(availability|available|calendar|consultation|meeting|time)\b/i.test(answer)) {
+    const repeatsAvailabilityCheck = /^(check|try|look)( again)?[.!]?$/i.test(answer)
+      && messages.slice(-3).some((message) => /consultation times|available times|open consultation|public consultation times/i.test(message.content));
+    if (/\b(check|show|book|schedule|see|want)\b.*\b(availability|available|calendar|consultation|meeting|time)\b/i.test(answer) || repeatsAvailabilityCheck) {
       setMessages((value) => [...value, { role: "user", sender: "visitor", senderName: "You", content: answer }]); setInput(""); setBusy(true);
       try {
         const { slots } = await api.calendarSlots();
@@ -147,6 +159,7 @@ export function Chat() {
       const transcript = messages.map(({ role, content }) => ({ role, content }));
       const result = await api.handoff({ ...contact, transcript, consent: true });
       setWorkspaceId(result.workspaceId);
+      setBookingProfile({ name: contact.name, email: contact.email, topic: contact.intent });
       history.replaceState(null, "", `/chat/${result.workspaceId}`);
       setMessages((value) => [...value, { role: "assistant", sender: "agent", senderName: "Portfolio Agent", content: result.answer }]);
       setHandoff(false);
