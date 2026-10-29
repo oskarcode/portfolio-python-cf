@@ -9,7 +9,7 @@ A Cloudflare-native professional portfolio that combines a technical website, lo
 - Converts a chat into a persistent visitor/Oskar/agent workspace only after explicit consent.
 - Creates a persistent workspace before consultation booking, then reuses its verified contact details for availability, confirmation email, Google Meet, and calendar reminders.
 - Gives the admin one chat interface for managed workspaces and visitor collaborations.
-- Attaches web search, one-time scheduling, and reusable skills independently to each workspace.
+- Gives every admin-created managed workspace the complete owner tool registry, web access, scheduling, and all enabled content skills automatically; visitor capabilities remain explicitly attached per workspace.
 - Stores reusable skill files in a durable Cloudflare Computer workspace and runs approved Worker Shell commands.
 - Lets the private content agent update portfolio sections and blog posts with revision history.
 
@@ -159,7 +159,7 @@ npm run deploy
 | Symptom | Check |
 | --- | --- |
 | Admin redirects or returns 401 | Cloudflare Access application and policy for both admin path patterns |
-| Agent answers without a tool | Workspace **Tools & skills** attachment and `workspace_capabilities` rows |
+| Visitor agent answers without a tool | Workspace **Tools & skills** attachment and `workspace_capabilities` rows; managed workspaces receive the owner registry automatically |
 | Skill is unavailable | Skill enabled state, audience, and workspace attachment |
 | Computer command fails | `SKILL_LOADER`, `experimental` compatibility flag, command availability, and stderr |
 | Schedule never runs | Durable Object alarm state and `PortfolioSession.alarm()` logs |

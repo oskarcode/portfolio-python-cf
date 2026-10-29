@@ -71,6 +71,25 @@ describe("admin workspace catalog", () => {
     expect(workspaces.filter((workspace) => workspace.kind === "visitor")).toHaveLength(7);
   });
 
+  it("automatically exposes every managed-workspace capability and enabled content skill", async () => {
+    const db = {
+      prepare: (sql: string) => ({ bind: () => ({ first: async () => sql.includes("admin_workspaces") ? { id: "managed-1", title: "Managed", purpose: "Test", status: "active" } : null }) }),
+    } as unknown as D1Database;
+    const env = {
+      DB: db,
+      SKILL_HUB: { getByName: () => ({ listSkills: async () => [
+        { slug: "enabled-skill", name: "Enabled", description: "Available", audience: "content", enabled: true, updatedAt: "2030-01-01", updatedBy: "test" },
+        { slug: "disabled-skill", name: "Disabled", description: "Unavailable", audience: "content", enabled: false, updatedAt: "2030-01-01", updatedBy: "test" },
+      ] }) },
+    } as unknown as Env;
+
+    const response = await app.request("http://localhost/api/admin/workspaces/managed-1/capabilities", {}, env);
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ webSearch: true, scheduling: true, skillSlugs: ["enabled-skill"] });
+    const update = await app.request("http://localhost/api/admin/workspaces/managed-1/capabilities", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ webSearch: false, scheduling: false, skillSlugs: [] }) }, env);
+    expect(update.status).toBe(409);
+  });
+
   it("deletes a managed workspace Durable Object and D1 records", async () => {
     let durableDeleted = false;
     let batchSql: string[] = [];

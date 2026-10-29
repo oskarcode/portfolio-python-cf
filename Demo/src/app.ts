@@ -459,7 +459,14 @@ app.post("/api/admin/workspaces", async (c) => c.json(await createAdminWorkspace
  * What this function does:
  * - It enforces the route boundary, calls the owning service, and maps failures through Hono.
  */
-app.get("/api/admin/workspaces/:id/capabilities", async (c) => c.json(await workspaceCapabilities(c.env.DB, c.req.param("id"))));
+app.get("/api/admin/workspaces/:id/capabilities", async (c) => {
+  const workspaceId = c.req.param("id");
+  if (await managedWorkspace(c.env.DB, workspaceId)) {
+    const skills = await c.env.SKILL_HUB.getByName("global").listSkills("content");
+    return c.json({ webSearch: true, scheduling: true, skillSlugs: skills.filter((skill) => skill.enabled).map((skill) => skill.slug).sort() });
+  }
+  return c.json(await workspaceCapabilities(c.env.DB, workspaceId));
+});
 /**
  * Input:
  * - PUT /api/admin/workspaces/:id/capabilities with path, query, or JSON values defined in the handler.
@@ -469,8 +476,10 @@ app.get("/api/admin/workspaces/:id/capabilities", async (c) => c.json(await work
  * - It enforces the route boundary, calls the owning service, and maps failures through Hono.
  */
 app.put("/api/admin/workspaces/:id/capabilities", async (c) => {
+  const workspaceId = c.req.param("id");
+  if (await managedWorkspace(c.env.DB, workspaceId)) return c.json({ error: "Managed workspaces automatically use the complete owner tool registry" }, 409);
   const input = await c.req.json<WorkspaceCapabilities>();
-  return c.json(await saveWorkspaceCapabilities(c.env.DB, c.req.param("id"), { webSearch: input.webSearch === true, scheduling: input.scheduling === true, skillSlugs: Array.isArray(input.skillSlugs) ? input.skillSlugs.filter((slug): slug is string => typeof slug === "string") : [] }));
+  return c.json(await saveWorkspaceCapabilities(c.env.DB, workspaceId, { webSearch: input.webSearch === true, scheduling: input.scheduling === true, skillSlugs: Array.isArray(input.skillSlugs) ? input.skillSlugs.filter((slug): slug is string => typeof slug === "string") : [] }));
 });
 /**
  * Input:
