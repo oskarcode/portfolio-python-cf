@@ -47,9 +47,7 @@ type FocusArea = {
   id: FocusId;
   title: string;
   summary: string;
-  bridge: string;
   evidence: string[];
-  bindings: string[];
 };
 
 const MODULE_ORDER: ModuleId[] = ["profile", "focus", "work", "experience", "teaching", "writing", "consulting", "contact"];
@@ -62,14 +60,14 @@ const isModuleId = (value: string): value is ModuleId => MODULE_ORDER.includes(v
 function focusAreas(capabilities: Item[]): FocusArea[] {
   const capability = (id: string) => capabilities.find((item) => item.id === id);
   return [
-    { id: "cloud", title: "Cloud platforms", summary: capability("cloudflare")?.body ?? "Cloud architecture designed for teams to operate and evolve.", bridge: "strategy → architecture → operations", evidence: capability("cloudflare")?.tags ?? ["Workers", "D1", "R2"], bindings: ["Workers", "D1", "Durable Objects"] },
-    { id: "cybersecurity", title: "Cybersecurity", summary: capability("security")?.body ?? "Security designed into architecture rather than added after delivery.", bridge: "risk → controls → usable security", evidence: capability("security")?.tags ?? ["Zero Trust", "WAF"], bindings: ["Access", "WAF", "Zero Trust"] },
-    { id: "infrastructure", title: "Infrastructure", summary: "Reliable application, data, and platform foundations that connect technical requirements to operations.", bridge: "requirements → systems → reliability", evidence: ["Distributed systems", "Serverless", "Data services"], bindings: ["Workers", "AWS", "D1"] },
-    { id: "networking", title: "Networking", summary: "Connectivity, traffic paths, performance, and security controls explained as one system.", bridge: "users → network → applications", evidence: ["Connectivity", "Performance", "Network security"], bindings: ["Cloudflare Network", "Zero Trust"] },
-    { id: "agentic-ai", title: "Agentic AI", summary: capability("agents")?.body ?? "Durable agents that reason, use approved tools, and collaborate with people.", bridge: "models → tools → durable workflows", evidence: capability("agents")?.tags ?? ["Agents", "MCP"], bindings: ["Workers AI", "AI Gateway", "Durable Objects"] },
-    { id: "agent-harness", title: "Agent harness", summary: "The runtime around the model: tools, memory, policy, evaluation, observability, human approval, and recovery.", bridge: "model → harness → governed outcome", evidence: ["Tools", "Memory", "Guardrails", "Evaluation", "Recovery"], bindings: ["Pi Durable", "AI Gateway", "Cloudflare Computer"] },
-    { id: "technical-teaching", title: "Technical teaching", summary: capability("technical-teaching")?.body ?? "Graduate teaching, hands-on labs, workshops, and mentorship that turn complex systems into practical understanding.", bridge: "concepts → practice → confidence", evidence: capability("technical-teaching")?.tags ?? ["Graduate teaching", "AWS labs", "Workshops"], bindings: ["Yeshiva University", "AWS", "Curriculum design"] },
-    { id: "b2b-technical-sales", title: "B2B technical sales", summary: capability("b2b-technical-sales")?.body ?? "Technical discovery, value translation, demonstrations, and enterprise sales strategy across global markets.", bridge: "customer need → technical value → business outcome", evidence: capability("b2b-technical-sales")?.tags ?? ["Discovery", "Solutions engineering", "Enterprise sales"], bindings: ["APAC", "EMEA", "North America"] },
+    { id: "cloud", title: "Cloud platforms", summary: capability("cloudflare")?.body ?? "I build full-stack, serverless agentic workflows on Cloudflare using open-source harnesses and the Workers developer platform.", evidence: capability("cloudflare")?.tags ?? ["Workers", "Durable Objects", "D1", "R2", "Workers AI", "AI Gateway"] },
+    { id: "cybersecurity", title: "Cybersecurity", summary: capability("security")?.body ?? "I identify common application and API threats, then design layered mitigations with Cloudflare application security services.", evidence: capability("security")?.tags ?? ["DDoS", "SQL injection", "RCE", "API abuse", "Bot scraping"] },
+    { id: "infrastructure", title: "Infrastructure", summary: capability("infrastructure")?.body ?? "I build full-stack applications on AWS and design Well-Architected foundations across compute, storage, and networking services.", evidence: capability("infrastructure")?.tags ?? ["AWS", "Compute", "Storage", "Networking", "Well-Architected"] },
+    { id: "networking", title: "Networking", summary: capability("networking")?.body ?? "I troubleshoot DNS and TCP/IP issues, protect Layer 3 traffic, and design corporate networks that connect, secure, and scale.", evidence: capability("networking")?.tags ?? ["DNS", "TCP/IP", "Layer 3", "Network architecture"] },
+    { id: "agentic-ai", title: "Agentic AI", summary: capability("agents")?.body ?? "I integrate model APIs and tune model parameters to improve quality, reliability, cost, and latency for agentic applications.", evidence: capability("agents")?.tags ?? ["Model APIs", "Inference parameters", "Workers AI", "AI Gateway"] },
+    { id: "agent-harness", title: "Agent harness", summary: capability("agent-harness")?.body ?? "I work with LangChain, Pi, and OpenCode; explain the components around a model; and build basic harnesses with an agent loop, tools, memory, and guardrails.", evidence: capability("agent-harness")?.tags ?? ["LangChain", "Pi", "OpenCode", "Agent loops", "Tools", "Memory"] },
+    { id: "technical-teaching", title: "Technical teaching", summary: capability("technical-teaching")?.body ?? "I built a full-stack teaching platform where students can use AI safely to learn, review, and extend their knowledge, supported by practical technical curriculum design.", evidence: capability("technical-teaching")?.tags ?? ["Teaching platform", "AI-assisted learning", "Curriculum design", "Cloud labs"] },
+    { id: "b2b-technical-sales", title: "B2B technical sales", summary: capability("b2b-technical-sales")?.body ?? "Technical discovery, value translation, demonstrations, and enterprise sales strategy across global markets.", evidence: capability("b2b-technical-sales")?.tags ?? ["Discovery", "Solutions engineering", "Enterprise sales"] },
   ];
 }
 
@@ -103,7 +101,7 @@ function buildModules(sections: SiteSection[], posts: BlogPost[]): Record<Module
     },
     focus: {
       id: "focus", file: "focus.ts", path: "src/focus.ts", language: "ts", kicker: "TECHNICAL FOCUS",
-      title: "Technical focus",
+      title: "Main expertise",
       summary: "Eight areas where hands-on engineering, customer work, teaching, and technical sales come together.",
       code: `export const focus: FocusArea[] = [
   cloud,
