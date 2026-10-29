@@ -14,9 +14,7 @@ export function Layout({ children }: { children: ReactNode }) {
   return <>
     <header className="site-header">
       <a className="brand" href="/"><span className="brand-mark">OA</span><span><strong>Oskar Ablimit</strong><small>Senior Customer Engineer</small></span></a>
-      <a className="chat-link" href="/chat"><span className="chat-link-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="17" height="17"><path d="M5 5h14v10H9l-4 4V5Z" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round"/></svg></span><span><strong>Start chat</strong><small>Anonymous by default</small></span><b>↗</b></a>
       <nav aria-label="Main navigation">
-        <a href="/#chat">Chat guide</a>
         <a href="/#profile">Profile</a>
         <a href="/#expertise">Main expertise</a>
         <a href="/#work">Selected work</a>

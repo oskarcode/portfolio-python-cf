@@ -262,7 +262,7 @@ function BlockRenderer({ block }: { block: ContentBlock }) {
 }
 
 function ModuleDocument({ module }: { module: PortfolioModule }) {
-  return <article className="cp-document"><span className="cp-kicker">{module.kicker}</span><h1>{module.title}</h1><p className="cp-lead">{module.summary}</p><CodeBlock code={module.code}/>{module.blocks.map((block, index) => <BlockRenderer block={block} key={`${block.type}-${index}`}/>)}</article>;
+  return <article className="cp-document"><span className="cp-kicker">{module.kicker}</span><h1>{module.title}</h1><p className="cp-lead">{module.summary}</p>{module.id === "chat" && <div className="cp-chat-launch"><a href="/chat"><span aria-hidden="true"><svg viewBox="0 0 24 24" width="19" height="19"><path d="M5 5h14v10H9l-4 4V5Z" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round"/></svg></span><div><strong>Start portfolio chat</strong><small>Anonymous by default · clears on refresh</small></div><b>→</b></a><p>Ask about Oskar’s work, check consultation availability, or book a meeting conversationally.</p></div>}<CodeBlock code={module.code}/>{module.blocks.map((block, index) => <BlockRenderer block={block} key={`${block.type}-${index}`}/>)}</article>;
 }
 
 function CommandPalette({ modules, onClose, onOpen }: { modules: Record<ModuleId, PortfolioModule>; onClose: () => void; onOpen: (id: ModuleId) => void }) {
