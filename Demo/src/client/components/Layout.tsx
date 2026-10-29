@@ -13,9 +13,9 @@ export function Layout({ children }: { children: ReactNode }) {
   const path = window.location.pathname;
   return <>
     <header className="site-header">
-      <a className="brand" href="/"><span className="brand-mark">OA</span><span><strong>Oskar Ablimit</strong><small>Solutions Engineer</small></span></a>
+      <a className="brand" href="/"><span className="brand-mark">OA</span><span><strong>Oskar Ablimit</strong><small>Senior Customer Engineer</small></span></a>
       <nav aria-label="Main navigation">
-        <a href="/#readme">README</a>
+        <a href="/#profile">Profile</a>
         <a href="/#focus">Focus</a>
         <a href="/#work">Selected work</a>
         <a href="/#experience">Experience</a>
