@@ -3,7 +3,8 @@ import { describe, expect, it } from "vitest";
 import app from "../src/app";
 import { OWNER_PROMPT, VISITOR_PROMPT } from "../src/agent/prompt";
 import { createSkillTools, type SkillHubCaller } from "../src/skills/tools";
-import { notifyOwnerOfHandoff } from "../src/notifications/email";
+import { notifyOwnerOfBooking, notifyOwnerOfHandoff } from "../src/notifications/email";
+import { bookingIcs } from "../src/calendar/ics";
 
 describe("API boundaries", () => {
   it("protects admin APIs when Cloudflare Access identity is absent", async () => {
@@ -54,6 +55,18 @@ describe("transactional notifications", () => {
     expect(sent?.to).toBe("oskarmansanqu@icloud.com");
     expect(sent?.html).toContain("Visitor &lt;script&gt;");
     expect(sent?.text).toContain("/admin?workspace=private-id");
+  });
+
+  it("builds a booking alert and a downloadable reminder", async () => {
+    let sent: Parameters<SendEmail["send"]>[0] | undefined;
+    const env: Pick<Env, "NOTIFICATION_EMAIL"> = { NOTIFICATION_EMAIL: { send: async (message) => { sent = message; return { messageId: "test" }; } } };
+    const value = { id: "booking-1", slotId: "slot-1", workspaceId: null, name: "Visitor", email: "visitor@example.com", topic: "Sales engineering", status: "confirmed" as const, startsAt: "2030-01-02T15:00:00.000Z", endsAt: "2030-01-02T15:30:00.000Z", createdAt: "2030-01-01T12:00:00.000Z" };
+    await notifyOwnerOfBooking(env, { ...value, bookingId: value.id, origin: "https://portfolio.example.com" });
+    expect(sent?.subject).toBe("New consultation booking from Visitor");
+    expect(sent?.text).toContain("/admin/calendar");
+    const calendar = bookingIcs(value);
+    expect(calendar).toContain("TRIGGER:-PT24H");
+    expect(calendar).toContain("DTSTART:20300102T150000Z");
   });
 });
 

@@ -12,7 +12,9 @@ import type { BlogPost, ChatMessage, Lead, SiteSection } from "./shared/types";
 import type { SaveSkillInput } from "./skills/types";
 import { createAdminWorkspace, listAdminWorkspaces, managedWorkspace, saveWorkspaceCapabilities, workspaceCapabilities } from "./data/workspaces";
 import type { WorkspaceCapabilities } from "./shared/types";
-import { notifyOwnerOfHandoff } from "./notifications/email";
+import { notifyOwnerOfBooking, notifyOwnerOfHandoff } from "./notifications/email";
+import { bookingIcs } from "./calendar/ics";
+import { cancelSlot, createBooking, createSlot, getBooking, listCalendar, listOpenSlots } from "./data/calendar";
 
 const app = new Hono<{ Bindings: Env }>();
 app.use("/api/*", cors({ origin: (origin) => origin, credentials: true }));
@@ -106,6 +108,28 @@ app.post("/api/chat", async (c) => {
  * What this function does:
  * - It enforces the route boundary, calls the owning service, and maps failures through Hono.
  */
+app.get("/api/calendar/slots", async (c) => c.json({ slots: await listOpenSlots(c.env.DB) }));
+
+app.get("/api/calendar/bookings/:id/calendar.ics", async (c) => {
+  const id = c.req.param("id");
+  if (!id) return c.json({ error: "Booking not found" }, 404);
+  const value = await getBooking(c.env.DB, id);
+  if (!value || value.status !== "confirmed") return c.json({ error: "Booking not found" }, 404);
+  return new Response(bookingIcs(value), { headers: { "Content-Type": "text/calendar; charset=utf-8", "Content-Disposition": `attachment; filename="oskar-consultation-${value.id}.ics"` } });
+});
+
+app.post("/api/calendar/bookings", async (c) => {
+  const input = await c.req.json<{ slotId?: string; workspaceId?: string; name?: string; email?: string; topic?: string }>();
+  if (!input.slotId || !input.name?.trim() || !input.email?.match(/^[^\s@]+@[^\s@]+\.[^\s@]+$/) || !input.topic?.trim()) return c.json({ error: "A time, name, valid email, and topic are required" }, 400);
+  try {
+    const value = await createBooking(c.env.DB, { slotId: input.slotId, workspaceId: input.workspaceId, name: input.name.trim().slice(0, 120), email: input.email.trim().slice(0, 254), topic: input.topic.trim().slice(0, 1_000) });
+    c.executionCtx.waitUntil(notifyOwnerOfBooking(c.env, { ...value, bookingId: value.id, origin: new URL(c.req.url).origin }).catch((error: unknown) => console.error(JSON.stringify({ event: "booking_notification_failed", bookingId: value.id, error: error instanceof Error ? error.message : String(error) }))));
+    return c.json({ booking: value, calendarUrl: `/api/calendar/bookings/${value.id}/calendar.ics` }, 201);
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : "Could not book this time" }, 409);
+  }
+});
+
 app.post("/api/handoff", async (c) => {
   const input = await c.req.json<{
     name?: string; email?: string; company?: string; intent?: string; summary?: string;
@@ -203,6 +227,19 @@ app.use("/api/admin/*", requireAdmin);
  * - It enforces the route boundary, calls the owning service, and maps failures through Hono.
  */
 app.get("/api/admin/me", (c) => c.json({ email: adminEmail(c.req.raw) ?? "local-development" }));
+app.get("/api/admin/calendar", async (c) => c.json(await listCalendar(c.env.DB)));
+app.post("/api/admin/calendar/slots", async (c) => {
+  const input = await c.req.json<{ startsAt?: string; endsAt?: string }>();
+  const starts = input.startsAt ? new Date(input.startsAt) : null;
+  const ends = input.endsAt ? new Date(input.endsAt) : null;
+  if (!starts || !ends || Number.isNaN(starts.valueOf()) || Number.isNaN(ends.valueOf()) || starts <= new Date() || ends <= starts || ends.valueOf() - starts.valueOf() > 8 * 60 * 60 * 1_000) return c.json({ error: "Choose a future start and an end no more than eight hours later" }, 400);
+  try { return c.json(await createSlot(c.env.DB, starts.toISOString(), ends.toISOString()), 201); }
+  catch (error) { return c.json({ error: error instanceof Error ? error.message : "Could not add this time" }, 409); }
+});
+app.delete("/api/admin/calendar/slots/:id", async (c) => {
+  const cancelled = await cancelSlot(c.env.DB, c.req.param("id"));
+  return cancelled ? c.json({ cancelled: true }) : c.json({ error: "Only open times can be removed" }, 409);
+});
 /**
  * Input:
  * - GET /api/admin/skills with path, query, or JSON values defined in the handler.

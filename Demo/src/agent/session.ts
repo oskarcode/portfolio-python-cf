@@ -101,7 +101,7 @@ export class PortfolioSession extends DurableObject<Env> {
     const models = createModels();
     const workersAI = createAI({ binding: this.env.AI, id: this.env.AI_GATEWAY_ID });
     models.setProvider(workersAI.provider);
-    const publicTools = createPortfolioTools(this.env.DB, this.env.BOOKING_URL);
+    const publicTools = createPortfolioTools(this.env);
     const ownerTools = createOwnerTools(this.env.DB);
     const skillHub = this.env.SKILL_HUB.getByName("global");
     const allowedSkills = () => this.#attachedSkillSlugs();
@@ -141,7 +141,7 @@ export class PortfolioSession extends DurableObject<Env> {
    */
   async #conversation(owner: boolean): Promise<Conversation> {
     await this.#ready;
-    const publicTools = createPortfolioTools(this.env.DB, this.env.BOOKING_URL);
+    const publicTools = createPortfolioTools(this.env);
     const ownerTools = createOwnerTools(this.env.DB);
     const skillHub = this.env.SKILL_HUB.getByName("global");
     const capabilities = await workspaceCapabilities(this.env.DB, this.#workspaceId);

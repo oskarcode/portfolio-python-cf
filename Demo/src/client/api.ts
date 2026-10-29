@@ -1,5 +1,5 @@
 // Application ownership: Typed browser HTTP client for public and Access-protected APIs.
-import type { AdminWorkspaceSummary, BlogPost, ChatMessage, Lead, SiteSection, WorkspaceCapabilities, WorkspaceSnapshot } from "../shared/types";
+import type { AdminWorkspaceSummary, BlogPost, CalendarBooking, CalendarSlot, ChatMessage, Lead, SiteSection, WorkspaceCapabilities, WorkspaceSnapshot } from "../shared/types";
 import type { ComputerFileEntry, SaveSkillInput, SkillRecord, SkillSummary } from "../skills/types";
 
 /**
@@ -23,6 +23,8 @@ export const api = {
   posts: () => request<{ posts: BlogPost[] }>("/api/blog"),
   post: (slug: string) => request<BlogPost>(`/api/blog/${encodeURIComponent(slug)}`),
   chat: (messages: ChatMessage[]) => request<{ answer: string }>("/api/chat", { method: "POST", body: JSON.stringify({ messages }) }),
+  calendarSlots: () => request<{ slots: CalendarSlot[] }>("/api/calendar/slots"),
+  bookCalendarSlot: (input: { slotId: string; workspaceId?: string; name: string; email: string; topic: string }) => request<{ booking: CalendarBooking; calendarUrl: string }>("/api/calendar/bookings", { method: "POST", body: JSON.stringify(input) }),
   handoff: (input: { name: string; email: string; company: string; intent: string; transcript: ChatMessage[]; consent: boolean }) =>
     request<{ workspaceId: string; leadId: string; answer: string }>("/api/handoff", { method: "POST", body: JSON.stringify(input) }),
   workspaceMessage: (id: string, message: string, recipient: "owner" | "agent") =>
@@ -31,6 +33,9 @@ export const api = {
     }),
   workspaceHistory: (id: string) => request<WorkspaceSnapshot>(`/api/workspaces/${id}`),
   adminContent: () => request<{ sections: SiteSection[]; posts: BlogPost[] }>("/api/admin/content"),
+  adminCalendar: () => request<{ slots: CalendarSlot[]; bookings: CalendarBooking[] }>("/api/admin/calendar"),
+  createCalendarSlot: (startsAt: string, endsAt: string) => request<CalendarSlot>("/api/admin/calendar/slots", { method: "POST", body: JSON.stringify({ startsAt, endsAt }) }),
+  cancelCalendarSlot: (id: string) => request<{ cancelled: boolean }>(`/api/admin/calendar/slots/${encodeURIComponent(id)}`, { method: "DELETE" }),
   skills: () => request<{ skills: SkillSummary[] }>("/api/admin/skills"),
   skill: (slug: string) => request<SkillRecord>(`/api/admin/skills/${encodeURIComponent(slug)}`),
   saveSkill: (input: SaveSkillInput, existing = false) => request<SkillRecord>(existing ? `/api/admin/skills/${encodeURIComponent(input.slug)}` : "/api/admin/skills", { method: existing ? "PUT" : "POST", body: JSON.stringify(input) }),

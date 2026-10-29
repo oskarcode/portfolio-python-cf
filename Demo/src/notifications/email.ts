@@ -11,7 +11,21 @@ const escapeHtml = (value: string) => value.replace(/[&<>'"]/g, (character) => (
   '"': "&quot;",
 })[character] ?? character);
 
-/** Sends Oskar a transactional alert after a visitor explicitly creates a persistent workspace. */
+/** Sends Oskar a transactional alert after a consultation is booked. */
+export async function notifyOwnerOfBooking(env: Pick<Env, "NOTIFICATION_EMAIL">, input: {
+  bookingId: string; name: string; email: string; topic: string; startsAt: string; endsAt: string; origin: string;
+}): Promise<void> {
+  const when = `${new Date(input.startsAt).toUTCString()}–${new Date(input.endsAt).toUTCString()}`;
+  const adminUrl = `${input.origin}/admin/calendar`;
+  await env.NOTIFICATION_EMAIL.send({
+    from: { email: SENDER_ADDRESS, name: "Portfolio Calendar" },
+    to: OWNER_NOTIFICATION_ADDRESS,
+    subject: `New consultation booking from ${input.name.replace(/[\r\n]+/g, " ").trim()}`,
+    text: `A consultation was booked.\n\nVisitor: ${input.name}\nEmail: ${input.email}\nWhen: ${when}\nTopic: ${input.topic}\nBooking: ${input.bookingId}\n\nManage calendar: ${adminUrl}`,
+    html: `<h1>New consultation booking</h1><p><strong>Visitor:</strong> ${escapeHtml(input.name)}</p><p><strong>Email:</strong> ${escapeHtml(input.email)}</p><p><strong>When:</strong> ${escapeHtml(when)}</p><p><strong>Topic:</strong> ${escapeHtml(input.topic)}</p><p><a href="${escapeHtml(adminUrl)}">Manage calendar</a></p>`,
+  });
+}
+
 export async function notifyOwnerOfHandoff(env: Pick<Env, "NOTIFICATION_EMAIL">, input: {
   name: string;
   email: string;

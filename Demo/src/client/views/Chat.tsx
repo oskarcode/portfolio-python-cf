@@ -3,6 +3,7 @@ import { FormEvent, useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import type { ChatMessage, WorkspaceMessage } from "../../shared/types";
 import { ChatResponse, responseActions } from "../components/ChatResponse";
+import { ChatCalendar } from "../components/ChatCalendar";
 
 type DisplayMessage = ChatMessage & {
   sender?: WorkspaceMessage["sender"];
@@ -48,6 +49,7 @@ export function Chat() {
   const [input, setInput] = useState(starterPrompt);
   const [busy, setBusy] = useState(false);
   const [handoff, setHandoff] = useState(false);
+  const [calendar, setCalendar] = useState(new URLSearchParams(window.location.search).has("calendar"));
   const [contact, setContact] = useState({ name: "", email: "", company: "", intent: "" });
   const end = useRef<HTMLDivElement>(null);
 
@@ -65,6 +67,9 @@ export function Chat() {
 
   const send = async (text: string) => {
     if (!text.trim() || busy) return;
+    if (/\b(check|show|book|schedule|see)\b.*\b(availability|available|calendar|consultation|meeting|time)\b/i.test(text)) {
+      setCalendar(true); setInput(""); return;
+    }
     if (!workspaceId && /\b(add|talk to|contact|include|meet)\s+(oskar|him|you)\b/i.test(text)) {
       setContact((value) => ({ ...value, intent: text }));
       setMessages((value) => [...value,
@@ -116,8 +121,9 @@ export function Chat() {
         })}{busy && <div className="message assistant agent"><span>{workspaceId && recipient === "owner" ? "SENDING" : "AGENT"}</span><div className="thinking">{workspaceId && recipient === "owner" ? "Delivering to Oskar" : "Thinking"}<span>…</span></div></div>}<div ref={end}/></div>
         {!workspaceId && messages.length <= 2 && <div className="suggestions">{suggestions.map((value) => <button onClick={() => void send(value)} key={value}>{value}<span>→</span></button>)}</div>}
         {workspaceId && <div className="recipient-switch" role="group" aria-label="Message recipient"><button type="button" className={recipient === "owner" ? "active" : ""} onClick={() => setRecipient("owner")}><strong>Message Oskar</strong><span>No agent response</span></button><button type="button" className={recipient === "agent" ? "active" : ""} onClick={() => setRecipient("agent")}><strong>Ask the agent</strong><span>Get an immediate answer</span></button></div>}
-        <form className="composer" onSubmit={submit}><textarea value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void send(input); } }} placeholder={workspaceId ? (recipient === "owner" ? "Write a message to Oskar…" : "Ask the portfolio agent…") : "Ask a question or describe what you need…"} rows={2}/><div>{workspaceId ? <button type="button" className="add-oskar" onClick={() => void navigator.clipboard.writeText(window.location.href)}>Copy workspace link</button> : <button type="button" className="add-oskar" onClick={() => setHandoff(true)}>+ Add Oskar</button>}<button className="send-button" disabled={busy || !input.trim()} aria-label="Send">↑</button></div></form>
+        <form className="composer" onSubmit={submit}><textarea value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void send(input); } }} placeholder={workspaceId ? (recipient === "owner" ? "Write a message to Oskar…" : "Ask the portfolio agent…") : "Ask a question or describe what you need…"} rows={2}/><div><button type="button" className="add-oskar" onClick={() => setCalendar(true)}>Calendar</button>{workspaceId ? <button type="button" className="add-oskar" onClick={() => void navigator.clipboard.writeText(window.location.href)}>Copy workspace link</button> : <button type="button" className="add-oskar" onClick={() => setHandoff(true)}>+ Add Oskar</button>}<button className="send-button" disabled={busy || !input.trim()} aria-label="Send">↑</button></div></form>
       </section></div>
+    {calendar && <div className="modal-backdrop calendar-backdrop"><ChatCalendar workspaceId={workspaceId} onClose={() => setCalendar(false)}/></div>}
     {handoff && <div className="modal-backdrop"><form className="handoff-modal" onSubmit={createHandoff}><button type="button" className="modal-close" onClick={() => setHandoff(false)}>×</button><span className="eyebrow">ADD OSKAR</span><h2>Turn this into a shared workspace</h2><p>Your conversation will become persistent and visible to Oskar. You can return with the private workspace link and choose whether each message goes to Oskar or the agent.</p><label>Name<input required value={contact.name} onChange={(e) => setContact({ ...contact, name: e.target.value })}/></label><label>Email<input required type="email" value={contact.email} onChange={(e) => setContact({ ...contact, email: e.target.value })}/></label><label>Company <small>optional</small><input value={contact.company} onChange={(e) => setContact({ ...contact, company: e.target.value })}/></label><label>What would you like help with?<textarea required value={contact.intent} onChange={(e) => setContact({ ...contact, intent: e.target.value })}/></label><label className="consent"><input required type="checkbox"/> I consent to save and share this conversation with Oskar.</label><button className="button primary" disabled={busy}>Create shared workspace</button></form></div>}
   </div>;
 }

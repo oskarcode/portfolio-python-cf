@@ -87,4 +87,24 @@ export interface WorkspaceCapabilities {
   skillSlugs: string[];
 }
 
+export interface CalendarSlot {
+  id: string;
+  startsAt: string;
+  endsAt: string;
+  status: "open" | "booked" | "cancelled";
+}
+
+export interface CalendarBooking {
+  id: string;
+  slotId: string;
+  workspaceId: string | null;
+  name: string;
+  email: string;
+  topic: string;
+  status: "confirmed" | "cancelled";
+  startsAt: string;
+  endsAt: string;
+  createdAt: string;
+}
+
 export const BOOKING_URL = "https://calendar.google.com/calendar/appointments/schedules/AcZssZ1xHKYdvcfsUs7Oj4wKIW8UOZmpNdOAyNYtDq0vI_WNlV_m_vuKA7QkDmlNYhgmXGHueVxGDPgw?gv=true";

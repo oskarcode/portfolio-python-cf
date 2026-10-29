@@ -3,6 +3,8 @@ import { Type } from "@earendil-works/pi-ai";
 import { defineTool } from "@earendil-works/pi-durable";
 import { getSection, listSections, saveSection } from "../data/content";
 import { getPost, listPosts, savePost } from "../data/blog";
+import { createBooking, listOpenSlots } from "../data/calendar";
+import { notifyOwnerOfBooking } from "../notifications/email";
 
 const output = (value: unknown) => ({ output: [{ type: "text" as const, text: JSON.stringify(value) }] });
 
@@ -14,7 +16,8 @@ const output = (value: unknown) => ({ output: [{ type: "text" as const, text: JS
  * What this function does:
  * - It constructs and persists a new record.
  */
-export function createPortfolioTools(db: D1Database, bookingUrl: string) {
+export function createPortfolioTools(env: Pick<Env, "DB" | "NOTIFICATION_EMAIL" | "PUBLIC_URL">) {
+  const db = env.DB;
   const readPortfolio = defineTool({
     name: "read_portfolio",
     description: "Read all published portfolio sections. Use this before answering questions about Oskar.",
@@ -36,14 +39,23 @@ export function createPortfolioTools(db: D1Database, bookingUrl: string) {
     replay: "safe",
     execute: async ({ slug }) => output(slug ? await getPost(db, slug) : await listPosts(db)),
   });
-  const booking = defineTool({
-    name: "get_booking_link",
-    description: "Return Oskar's Google Calendar booking link after the visitor indicates a relevant need.",
-    parameters: Type.Object({}),
-    replay: "safe",
-    execute: async () => output({ bookingUrl }),
+  const availability = defineTool({
+    name: "list_consultation_times",
+    description: "List Oskar's currently open consultation times. Times are UTC ISO timestamps; explain them clearly to the visitor.",
+    parameters: Type.Object({}), replay: "safe",
+    execute: async () => output(await listOpenSlots(db)),
   });
-  return [readPortfolio, readSection, readBlog, booking] as const;
+  const book = defineTool({
+    name: "book_consultation",
+    description: "Book one open consultation time only after the visitor explicitly chooses the exact time and confirms their name, email, and topic. Never guess or invent these values.",
+    parameters: Type.Object({ slotId: Type.String(), name: Type.String(), email: Type.String(), topic: Type.String(), workspaceId: Type.Optional(Type.String()) }),
+    execute: async (args) => {
+      const value = await createBooking(db, args);
+      await notifyOwnerOfBooking(env, { ...value, bookingId: value.id, origin: env.PUBLIC_URL }).catch((error: unknown) => console.error(JSON.stringify({ event: "booking_notification_failed", bookingId: value.id, error: error instanceof Error ? error.message : String(error) })));
+      return output({ booking: value, calendarUrl: `/api/calendar/bookings/${value.id}/calendar.ics`, reminder: "Download the calendar file to add the meeting and its 24-hour reminder." });
+    },
+  });
+  return [readPortfolio, readSection, readBlog, availability, book] as const;
 }
 
 /**
