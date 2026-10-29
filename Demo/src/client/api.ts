@@ -24,7 +24,7 @@ export const api = {
   post: (slug: string) => request<BlogPost>(`/api/blog/${encodeURIComponent(slug)}`),
   chat: (messages: ChatMessage[]) => request<{ answer: string }>("/api/chat", { method: "POST", body: JSON.stringify({ messages }) }),
   calendarSlots: () => request<{ slots: CalendarSlot[] }>("/api/calendar/slots"),
-  bookCalendarSlot: (input: { slotId: string; workspaceId?: string; name: string; email: string; topic: string }) => request<{ booking: CalendarBooking; calendarUrl: string }>("/api/calendar/bookings", { method: "POST", body: JSON.stringify(input) }),
+  bookCalendarSlot: (input: { slotId: string; workspaceId?: string; name: string; email: string; topic: string }) => request<{ booking: CalendarBooking; calendarUrl: string; meetingUrl: string }>("/api/calendar/bookings", { method: "POST", body: JSON.stringify(input) }),
   handoff: (input: { name: string; email: string; company: string; intent: string; transcript: ChatMessage[]; consent: boolean }) =>
     request<{ workspaceId: string; leadId: string; answer: string }>("/api/handoff", { method: "POST", body: JSON.stringify(input) }),
   workspaceMessage: (id: string, message: string, recipient: "owner" | "agent") =>

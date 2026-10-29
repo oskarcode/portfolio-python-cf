@@ -61,17 +61,21 @@ describe("transactional notifications", () => {
     let sent: Parameters<SendEmail["send"]>[0] | undefined;
     const env: Pick<Env, "NOTIFICATION_EMAIL"> = { NOTIFICATION_EMAIL: { send: async (message) => { sent = message; return { messageId: "test" }; } } };
     const value = { id: "booking-1", slotId: "slot-1", workspaceId: null, name: "Visitor", email: "visitor@example.com", topic: "Sales engineering", status: "confirmed" as const, startsAt: "2030-01-02T15:00:00.000Z", endsAt: "2030-01-02T15:30:00.000Z", createdAt: "2030-01-01T12:00:00.000Z" };
-    await notifyOwnerOfBooking(env, { ...value, bookingId: value.id, origin: "https://portfolio.example.com" });
+    const emailInput = { ...value, bookingId: value.id, origin: "https://portfolio.example.com", meetingUrl: "https://meet.google.com/test-room" };
+    await notifyOwnerOfBooking(env, emailInput);
     expect(sent?.subject).toBe("New consultation booking from Visitor");
     expect(sent?.text).toContain("/admin/calendar");
-    const calendar = bookingIcs(value);
+    const calendar = bookingIcs(value, emailInput.meetingUrl);
     expect(calendar).toContain("TRIGGER:-PT24H");
     expect(calendar).toContain("DTSTART:20300102T150000Z");
+    expect(calendar).toContain("LOCATION:https://meet.google.com/test-room");
 
-    await sendBookingConfirmation(env, { ...value, bookingId: value.id, origin: "https://portfolio.example.com" });
+    await sendBookingConfirmation(env, emailInput);
     expect(sent?.to).toBe("visitor@example.com");
-    expect(sent?.subject).toBe("Your consultation with Oskar Ablimit is confirmed");
+    expect(sent?.subject).toBe("Confirmed: your consultation with Oskar Ablimit");
     expect(sent?.text).toContain("/api/calendar/bookings/booking-1/calendar.ics");
+    expect(sent?.text).toContain("https://meet.google.com/test-room");
+    expect(sent?.html).toContain("Join Google Meet");
     expect(sent?.html).toContain("24-hour reminder");
   });
 });

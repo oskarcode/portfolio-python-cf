@@ -116,7 +116,7 @@ app.get("/api/calendar/bookings/:id/calendar.ics", async (c) => {
   if (!id) return c.json({ error: "Booking not found" }, 404);
   const value = await getBooking(c.env.DB, id);
   if (!value || value.status !== "confirmed") return c.json({ error: "Booking not found" }, 404);
-  return new Response(bookingIcs(value), { headers: { "Content-Type": "text/calendar; charset=utf-8", "Content-Disposition": `attachment; filename="oskar-consultation-${value.id}.ics"` } });
+  return new Response(bookingIcs(value, c.env.MEETING_URL), { headers: { "Content-Type": "text/calendar; charset=utf-8", "Content-Disposition": `attachment; filename="oskar-consultation-${value.id}.ics"` } });
 });
 
 app.post("/api/calendar/bookings", async (c) => {
@@ -124,12 +124,12 @@ app.post("/api/calendar/bookings", async (c) => {
   if (!input.slotId || !input.name?.trim() || !input.email?.match(/^[^\s@]+@[^\s@]+\.[^\s@]+$/) || !input.topic?.trim()) return c.json({ error: "A time, name, valid email, and topic are required" }, 400);
   try {
     const value = await createBooking(c.env.DB, { slotId: input.slotId, workspaceId: input.workspaceId, name: input.name.trim().slice(0, 120), email: input.email.trim().slice(0, 254), topic: input.topic.trim().slice(0, 1_000) });
-    const emailInput = { ...value, bookingId: value.id, origin: new URL(c.req.url).origin };
+    const emailInput = { ...value, bookingId: value.id, origin: new URL(c.req.url).origin, meetingUrl: c.env.MEETING_URL };
     c.executionCtx.waitUntil(Promise.all([
       notifyOwnerOfBooking(c.env, emailInput).catch((error: unknown) => console.error(JSON.stringify({ event: "booking_owner_notification_failed", bookingId: value.id, error: error instanceof Error ? error.message : String(error) }))),
       sendBookingConfirmation(c.env, emailInput).catch((error: unknown) => console.error(JSON.stringify({ event: "booking_confirmation_failed", bookingId: value.id, error: error instanceof Error ? error.message : String(error) }))),
     ]).then(() => undefined));
-    return c.json({ booking: value, calendarUrl: `/api/calendar/bookings/${value.id}/calendar.ics` }, 201);
+    return c.json({ booking: value, calendarUrl: `/api/calendar/bookings/${value.id}/calendar.ics`, meetingUrl: c.env.MEETING_URL }, 201);
   } catch (error) {
     return c.json({ error: error instanceof Error ? error.message : "Could not book this time" }, 409);
   }

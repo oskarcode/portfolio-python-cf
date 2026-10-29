@@ -78,7 +78,7 @@ export function Chat() {
     try {
       const result = await api.bookCalendarSlot({ slotId: slot.id, workspaceId: workspaceId ?? undefined, ...profile });
       setBookingFlow(null);
-      setMessages((value) => [...value, { role: "assistant", sender: "agent", senderName: "Portfolio Agent", content: `**Your meeting is confirmed.**\n\n**When:** ${formatSlot(result.booking.startsAt)}\n\n**Topic:** ${result.booking.topic}\n\nA confirmation email is being sent to **${result.booking.email}**, and Oskar has been notified. [Add the meeting to your calendar with a 24-hour reminder](${result.calendarUrl}).` }]);
+      setMessages((value) => [...value, { role: "assistant", sender: "agent", senderName: "Portfolio Agent", content: `**Your meeting is confirmed.**\n\n**When:** ${formatSlot(result.booking.startsAt)}\n\n**Topic:** ${result.booking.topic}\n\nA confirmation email is being sent to **${result.booking.email}**, and Oskar has been notified. [Join the Google Meet](${result.meetingUrl}) or [add the meeting to your calendar with a 24-hour reminder](${result.calendarUrl}).` }]);
     } catch (error) { setBookingFlow(null); setMessages((value) => [...value, { role: "assistant", sender: "agent", senderName: "Portfolio Agent", content: `I couldn’t reserve that time: ${error instanceof Error ? error.message : "Please try again."}` }]); }
     finally { setBusy(false); }
   };

@@ -16,7 +16,7 @@ const output = (value: unknown) => ({ output: [{ type: "text" as const, text: JS
  * What this function does:
  * - It constructs and persists a new record.
  */
-export function createPortfolioTools(env: Pick<Env, "DB" | "NOTIFICATION_EMAIL" | "PUBLIC_URL">) {
+export function createPortfolioTools(env: Pick<Env, "DB" | "NOTIFICATION_EMAIL" | "PUBLIC_URL" | "MEETING_URL">) {
   const db = env.DB;
   const readPortfolio = defineTool({
     name: "read_portfolio",
@@ -51,11 +51,11 @@ export function createPortfolioTools(env: Pick<Env, "DB" | "NOTIFICATION_EMAIL" 
     parameters: Type.Object({ slotId: Type.String(), name: Type.String(), email: Type.String(), topic: Type.String(), workspaceId: Type.Optional(Type.String()) }),
     execute: async (args) => {
       const value = await createBooking(db, args);
-      const emailInput = { ...value, bookingId: value.id, origin: env.PUBLIC_URL };
+      const emailInput = { ...value, bookingId: value.id, origin: env.PUBLIC_URL, meetingUrl: env.MEETING_URL };
       const [ownerEmail, visitorEmail] = await Promise.allSettled([notifyOwnerOfBooking(env, emailInput), sendBookingConfirmation(env, emailInput)]);
       if (ownerEmail.status === "rejected") console.error(JSON.stringify({ event: "booking_owner_notification_failed", bookingId: value.id, error: String(ownerEmail.reason) }));
       if (visitorEmail.status === "rejected") console.error(JSON.stringify({ event: "booking_confirmation_failed", bookingId: value.id, error: String(visitorEmail.reason) }));
-      return output({ booking: value, calendarUrl: `/api/calendar/bookings/${value.id}/calendar.ics`, confirmationEmail: visitorEmail.status === "fulfilled" ? "sent" : "failed", reminder: "The calendar download includes a 24-hour reminder." });
+      return output({ booking: value, meetingUrl: env.MEETING_URL, calendarUrl: `/api/calendar/bookings/${value.id}/calendar.ics`, confirmationEmail: visitorEmail.status === "fulfilled" ? "sent" : "failed", reminder: "The calendar download includes the Google Meet link and a 24-hour reminder." });
     },
   });
   return [readPortfolio, readSection, readBlog, availability, book] as const;

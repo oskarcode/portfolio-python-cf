@@ -11,35 +11,40 @@ const escapeHtml = (value: string) => value.replace(/[&<>'"]/g, (character) => (
   '"': "&quot;",
 })[character] ?? character);
 
-/** Sends the visitor a transactional booking confirmation with a local calendar reminder. */
+const utcMeetingTime = (startsAt: string, endsAt: string) => {
+  const day = new Intl.DateTimeFormat("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric", timeZone: "UTC" }).format(new Date(startsAt));
+  const time = new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit", timeZone: "UTC" });
+  return `${day} · ${time.format(new Date(startsAt))}–${time.format(new Date(endsAt))} UTC`;
+};
+
+/** Sends the visitor a transactional booking confirmation with meeting and reminder links. */
 export async function sendBookingConfirmation(env: Pick<Env, "NOTIFICATION_EMAIL">, input: {
-  bookingId: string; name: string; email: string; topic: string; startsAt: string; endsAt: string; origin: string;
+  bookingId: string; name: string; email: string; topic: string; startsAt: string; endsAt: string; origin: string; meetingUrl: string;
 }): Promise<void> {
-  const start = new Date(input.startsAt);
-  const end = new Date(input.endsAt);
-  const when = `${start.toUTCString()}–${end.toUTCString()}`;
+  const when = utcMeetingTime(input.startsAt, input.endsAt);
   const calendarUrl = `${input.origin}/api/calendar/bookings/${encodeURIComponent(input.bookingId)}/calendar.ics`;
+  const meetingUrl = escapeHtml(input.meetingUrl);
   await env.NOTIFICATION_EMAIL.send({
     from: { email: "calendar@oskarcode.com", name: "Oskar Ablimit" },
     to: input.email,
-    subject: "Your consultation with Oskar Ablimit is confirmed",
-    text: `Hi ${input.name},\n\nYour consultation with Oskar Ablimit is confirmed.\n\nWhen: ${when}\nTopic: ${input.topic}\n\nAdd the meeting and its 24-hour reminder to your calendar: ${calendarUrl}\n\nThis transactional message was sent because you booked through Oskar's portfolio chat.`,
-    html: `<h1>Your consultation is confirmed</h1><p>Hi ${escapeHtml(input.name)},</p><p>Your consultation with Oskar Ablimit is booked.</p><dl><dt>When</dt><dd>${escapeHtml(when)}</dd><dt>Topic</dt><dd>${escapeHtml(input.topic)}</dd></dl><p><a href="${escapeHtml(calendarUrl)}">Add to calendar with a 24-hour reminder</a></p><p><small>This transactional message was sent because you booked through Oskar's portfolio chat.</small></p>`,
+    subject: "Confirmed: your consultation with Oskar Ablimit",
+    text: `Hi ${input.name},\n\nYour consultation with Oskar Ablimit is confirmed.\n\nDATE AND TIME\n${when}\n\nTOPIC\n${input.topic}\n\nJOIN GOOGLE MEET\n${input.meetingUrl}\n\nADD TO CALENDAR\n${calendarUrl}\nThe calendar event includes a 24-hour reminder.\n\nSee you then,\nOskar`,
+    html: `<div style="margin:0;padding:32px 16px;background:#f3f6f8;color:#172b3a;font-family:Arial,sans-serif"><div style="max-width:620px;margin:0 auto;overflow:hidden;border:1px solid #d8e0e5;border-radius:12px;background:#ffffff"><div style="padding:28px 32px;background:#0f1b24;color:#ffffff"><div style="margin-bottom:14px;color:#f6821f;font-size:12px;font-weight:700;letter-spacing:.08em">MEETING CONFIRMED</div><h1 style="margin:0;font-size:27px;line-height:1.2">Your consultation with Oskar is booked</h1></div><div style="padding:30px 32px"><p style="margin:0 0 22px;font-size:16px;line-height:1.6">Hi ${escapeHtml(input.name)},<br>Your meeting is confirmed. Everything you need is below.</p><div style="margin:0 0 22px;padding:20px;border:1px solid #e1e7eb;border-radius:8px;background:#f8fafb"><div style="margin-bottom:6px;color:#697b88;font-size:11px;font-weight:700;letter-spacing:.06em">DATE AND TIME</div><div style="font-size:17px;font-weight:700;line-height:1.5">${escapeHtml(when)}</div><div style="margin:18px 0 6px;color:#697b88;font-size:11px;font-weight:700;letter-spacing:.06em">TOPIC</div><div style="font-size:15px;line-height:1.5">${escapeHtml(input.topic)}</div></div><a href="${meetingUrl}" style="display:block;margin-bottom:10px;padding:14px 18px;border-radius:7px;background:#f6821f;color:#ffffff;font-size:15px;font-weight:700;text-align:center;text-decoration:none">Join Google Meet</a><a href="${escapeHtml(calendarUrl)}" style="display:block;padding:13px 18px;border:1px solid #b8c4cc;border-radius:7px;color:#172b3a;font-size:14px;font-weight:700;text-align:center;text-decoration:none">Add to calendar + 24-hour reminder</a><p style="margin:24px 0 0;color:#697b88;font-size:12px;line-height:1.6">You received this transactional email because you booked through Oskar’s portfolio chat.</p></div></div></div>`,
   });
 }
 
 /** Sends Oskar a transactional alert after a consultation is booked. */
 export async function notifyOwnerOfBooking(env: Pick<Env, "NOTIFICATION_EMAIL">, input: {
-  bookingId: string; name: string; email: string; topic: string; startsAt: string; endsAt: string; origin: string;
+  bookingId: string; name: string; email: string; topic: string; startsAt: string; endsAt: string; origin: string; meetingUrl: string;
 }): Promise<void> {
-  const when = `${new Date(input.startsAt).toUTCString()}–${new Date(input.endsAt).toUTCString()}`;
+  const when = utcMeetingTime(input.startsAt, input.endsAt);
   const adminUrl = `${input.origin}/admin/calendar`;
   await env.NOTIFICATION_EMAIL.send({
     from: { email: SENDER_ADDRESS, name: "Portfolio Calendar" },
     to: OWNER_NOTIFICATION_ADDRESS,
     subject: `New consultation booking from ${input.name.replace(/[\r\n]+/g, " ").trim()}`,
-    text: `A consultation was booked.\n\nVisitor: ${input.name}\nEmail: ${input.email}\nWhen: ${when}\nTopic: ${input.topic}\nBooking: ${input.bookingId}\n\nManage calendar: ${adminUrl}`,
-    html: `<h1>New consultation booking</h1><p><strong>Visitor:</strong> ${escapeHtml(input.name)}</p><p><strong>Email:</strong> ${escapeHtml(input.email)}</p><p><strong>When:</strong> ${escapeHtml(when)}</p><p><strong>Topic:</strong> ${escapeHtml(input.topic)}</p><p><a href="${escapeHtml(adminUrl)}">Manage calendar</a></p>`,
+    text: `A consultation was booked.\n\nVisitor: ${input.name}\nEmail: ${input.email}\nWhen: ${when}\nTopic: ${input.topic}\nGoogle Meet: ${input.meetingUrl}\nBooking: ${input.bookingId}\n\nManage calendar: ${adminUrl}`,
+    html: `<h1>New consultation booking</h1><p><strong>Visitor:</strong> ${escapeHtml(input.name)}</p><p><strong>Email:</strong> ${escapeHtml(input.email)}</p><p><strong>When:</strong> ${escapeHtml(when)}</p><p><strong>Topic:</strong> ${escapeHtml(input.topic)}</p><p><a href="${escapeHtml(input.meetingUrl)}">Join Google Meet</a></p><p><a href="${escapeHtml(adminUrl)}">Manage calendar</a></p>`,
   });
 }
 
