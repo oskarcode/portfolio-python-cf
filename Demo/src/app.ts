@@ -5,8 +5,7 @@ import { cors } from "hono/cors";
 import { getPost, importMediumFeed, listPosts, savePost } from "./data/blog";
 import { getSection, listSections, saveSection, archiveSection } from "./data/content";
 import {
-  archiveWorkspace, createLead, deleteWorkspaceRecord, listLeads, restoreWorkspace,
-  updateLeadStatus, workspaceParticipants, workspaceRecord,
+  createLead, deleteWorkspaceRecord, listLeads, updateLeadStatus, workspaceParticipants, workspaceRecord,
 } from "./data/leads";
 import { anonymousChat } from "./agent/anonymous";
 import type { BlogPost, ChatMessage, Lead, SiteSection } from "./shared/types";
@@ -141,7 +140,6 @@ app.post("/api/calendar/bookings", async (c) => {
   if (!input.slotId || !input.workspaceId) return c.json({ error: "A persistent workspace and consultation time are required" }, 400);
   const lead = await workspaceRecord(c.env.DB, input.workspaceId);
   if (!lead) return c.json({ error: "Workspace not found" }, 404);
-  if (lead.workspaceStatus === "archived") return c.json({ error: "This workspace has been archived" }, 410);
   try {
     const value = await createBooking(c.env.DB, { slotId: input.slotId, workspaceId: input.workspaceId, name: lead.name, email: lead.email, topic: lead.intent });
     const calendarUrl = `/api/calendar/bookings/${value.id}/calendar.ics`;
@@ -218,7 +216,6 @@ app.get("/api/workspaces/:id", async (c) => {
   const workspaceId = c.req.param("id");
   const lead = await workspaceRecord(c.env.DB, workspaceId);
   if (!lead) return c.json({ error: "Workspace not found" }, 404);
-  if (lead.workspaceStatus === "archived") return c.json({ error: "This workspace has been archived" }, 410);
   return c.json({
     workspaceId,
     status: lead.workspaceStatus,
@@ -243,7 +240,6 @@ app.post("/api/workspaces/:id/messages", async (c) => {
   const workspaceId = c.req.param("id");
   const lead = await workspaceRecord(c.env.DB, workspaceId);
   if (!lead) return c.json({ error: "Workspace not found" }, 404);
-  if (lead.workspaceStatus === "archived") return c.json({ error: "This workspace has been archived" }, 410);
   const stub = c.env.PORTFOLIO_SESSION.getByName(workspaceId);
   if (input.recipient === "owner") {
     await stub.sendHumanMessage(input.message, "visitor", lead.name);
@@ -522,13 +518,11 @@ app.post("/api/admin/workspaces/:id/messages", async (c) => {
   const managed = await managedWorkspace(c.env.DB, workspaceId);
   const stub = c.env.PORTFOLIO_SESSION.getByName(workspaceId);
   if (managed) {
-    if (managed.status === "archived") return c.json({ error: "Restore the workspace before messaging" }, 409);
     if (input.recipient !== "agent") return c.json({ error: "Managed workspaces message the agent" }, 400);
     return c.json({ delivered: true, recipient: "agent", ...await stub.chat(input.message, input.requestId ?? crypto.randomUUID(), true, "Oskar Ablimit", "owner") });
   }
   const lead = await workspaceRecord(c.env.DB, workspaceId);
   if (!lead) return c.json({ error: "Workspace not found" }, 404);
-  if (lead.workspaceStatus === "archived") return c.json({ error: "Restore the workspace before replying" }, 409);
   if (input.recipient === "visitor") {
     await stub.sendHumanMessage(input.message, "owner", "Oskar Ablimit");
     return c.json({ delivered: true, recipient: "visitor" });
@@ -538,30 +532,6 @@ app.post("/api/admin/workspaces/:id/messages", async (c) => {
     recipient: "agent",
     ...await stub.chat(input.message, input.requestId ?? crypto.randomUUID(), false, "Oskar Ablimit", "owner"),
   });
-});
-/**
- * Input:
- * - POST /api/admin/workspaces/:id/archive with path, query, or JSON values defined in the handler.
- * Output:
- * - A JSON response or empty success response with an explicit HTTP status.
- * What this function does:
- * - It enforces the route boundary, calls the owning service, and maps failures through Hono.
- */
-app.post("/api/admin/workspaces/:id/archive", async (c) => {
-  await archiveWorkspace(c.env.DB, c.req.param("id"));
-  return c.json({ archived: true });
-});
-/**
- * Input:
- * - POST /api/admin/workspaces/:id/restore with path, query, or JSON values defined in the handler.
- * Output:
- * - A JSON response or empty success response with an explicit HTTP status.
- * What this function does:
- * - It enforces the route boundary, calls the owning service, and maps failures through Hono.
- */
-app.post("/api/admin/workspaces/:id/restore", async (c) => {
-  await restoreWorkspace(c.env.DB, c.req.param("id"));
-  return c.json({ restored: true });
 });
 /**
  * Input:

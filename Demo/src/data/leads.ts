@@ -108,32 +108,6 @@ export async function workspaceParticipants(db: D1Database, workspaceId: string)
  * Output:
  * - The declared return value or Promise; thrown errors follow the caller.
  * What this function does:
- * - It marks the selected state as archived.
- */
-export async function archiveWorkspace(db: D1Database, workspaceId: string): Promise<void> {
-  await db.prepare("UPDATE leads SET workspace_status = 'archived', updated_at = ? WHERE workspace_id = ?")
-    .bind(new Date().toISOString(), workspaceId).run();
-}
-
-/**
- * Input:
- * - The typed parameters shown in the function signature.
- * Output:
- * - The declared return value or Promise; thrown errors follow the caller.
- * What this function does:
- * - It returns archived state to active use.
- */
-export async function restoreWorkspace(db: D1Database, workspaceId: string): Promise<void> {
-  await db.prepare("UPDATE leads SET workspace_status = 'active', updated_at = ? WHERE workspace_id = ?")
-    .bind(new Date().toISOString(), workspaceId).run();
-}
-
-/**
- * Input:
- * - The typed parameters shown in the function signature.
- * Output:
- * - The declared return value or Promise; thrown errors follow the caller.
- * What this function does:
  * - It permanently removes the selected state.
  */
 export async function deleteWorkspaceRecord(db: D1Database, workspaceId: string): Promise<void> {

@@ -53,8 +53,6 @@ export const api = {
     request<{ delivered: boolean; recipient: "visitor" | "agent"; answer?: string }>(`/api/admin/workspaces/${id}/messages`, {
       method: "POST", body: JSON.stringify({ message, recipient, requestId: crypto.randomUUID() }),
     }),
-  archiveWorkspace: (id: string) => request<{ archived: boolean }>(`/api/admin/workspaces/${id}/archive`, { method: "POST" }),
-  restoreWorkspace: (id: string) => request<{ restored: boolean }>(`/api/admin/workspaces/${id}/restore`, { method: "POST" }),
   deleteWorkspace: (id: string) => request<void>(`/api/admin/workspaces/${id}`, { method: "DELETE" }),
   ownerChat: (message: string) => request<{ answer: string }>("/api/admin/agent", { method: "POST", body: JSON.stringify({ message, requestId: crypto.randomUUID() }) }),
   importMedium: () => request<{ imported: number; skipped: number }>("/api/admin/blog/import-medium", { method: "POST" }),

@@ -48,6 +48,13 @@ describe("API boundaries", () => {
     expect(response.status).toBe(404);
     expect(await response.json()).toEqual({ error: "Not found" });
   });
+
+  it("does not expose the removed workspace archive endpoints", async () => {
+    const archive = await app.request("http://localhost/api/admin/workspaces/workspace-1/archive", { method: "POST" }, {} as Env);
+    const restore = await app.request("http://localhost/api/admin/workspaces/workspace-1/restore", { method: "POST" }, {} as Env);
+    expect(archive.status).toBe(404);
+    expect(restore.status).toBe(404);
+  });
 });
 
 describe("admin workspace catalog", () => {

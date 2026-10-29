@@ -74,7 +74,7 @@ Generated or downloaded directories such as `node_modules/`, `dist/`, and `.wran
 | `GET` | `/api/calendar/slots` | List open consultation times |
 | `POST` | `/api/calendar/bookings` | Reserve a time using verified details from an active persistent workspace |
 | `GET` | `/api/calendar/bookings/:id/calendar.ics` | Download the confirmed event with its 24-hour reminder |
-| `GET` | `/api/workspaces/:id` | Restore an active capability URL workspace |
+| `GET` | `/api/workspaces/:id` | Load an active capability URL workspace |
 | `POST` | `/api/workspaces/:id/messages` | Explicitly message Oskar or ask the workspace agent |
 
 ### Access-protected admin routes
