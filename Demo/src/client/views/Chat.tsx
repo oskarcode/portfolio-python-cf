@@ -17,6 +17,7 @@ const suggestions = [
   "Recommend a technical article from Oskar’s blog.",
   "Show me Oskar’s most relevant agentic AI projects.",
   "Tell me about Oskar’s graduate cloud computing course.",
+  "I want to check availability for a technical sales consultation.",
   "I want to add Oskar and start a persistent conversation.",
 ];
 const displayWorkspace = (message: WorkspaceMessage): DisplayMessage => ({

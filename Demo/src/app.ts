@@ -12,6 +12,7 @@ import type { BlogPost, ChatMessage, Lead, SiteSection } from "./shared/types";
 import type { SaveSkillInput } from "./skills/types";
 import { createAdminWorkspace, listAdminWorkspaces, managedWorkspace, saveWorkspaceCapabilities, workspaceCapabilities } from "./data/workspaces";
 import type { WorkspaceCapabilities } from "./shared/types";
+import { notifyOwnerOfHandoff } from "./notifications/email";
 
 const app = new Hono<{ Bindings: Env }>();
 app.use("/api/*", cors({ origin: (origin) => origin, credentials: true }));
@@ -123,10 +124,23 @@ app.post("/api/handoff", async (c) => {
     input.name.trim(),
     input.intent ?? "Talk with Oskar",
   );
+  const intent = input.intent ?? "Talk with Oskar";
   const lead = await createLead(c.env.DB, {
     workspaceId, name: input.name, email: input.email, company: input.company,
-    intent: input.intent ?? "Talk with Oskar", summary: input.summary,
+    intent, summary: input.summary,
   });
+  c.executionCtx.waitUntil(notifyOwnerOfHandoff(c.env, {
+    name: input.name,
+    email: input.email,
+    company: input.company,
+    intent,
+    workspaceId,
+    origin: new URL(c.req.url).origin,
+  }).catch((error: unknown) => console.error(JSON.stringify({
+    event: "handoff_notification_failed",
+    workspaceId,
+    error: error instanceof Error ? error.message : String(error),
+  }))));
   return c.json({ workspaceId, leadId: lead.id, answer: imported.answer }, 201);
 });
 

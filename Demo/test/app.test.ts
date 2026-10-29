@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import app from "../src/app";
 import { OWNER_PROMPT, VISITOR_PROMPT } from "../src/agent/prompt";
 import { createSkillTools, type SkillHubCaller } from "../src/skills/tools";
+import { notifyOwnerOfHandoff } from "../src/notifications/email";
 
 describe("API boundaries", () => {
   it("protects admin APIs when Cloudflare Access identity is absent", async () => {
@@ -30,6 +31,29 @@ describe("API boundaries", () => {
     const response = await app.request("https://portfolio.example.com/api/missing", {}, {} as Env);
     expect(response.status).toBe(404);
     expect(await response.json()).toEqual({ error: "Not found" });
+  });
+});
+
+describe("transactional notifications", () => {
+  it("sends a bounded owner alert for a consented handoff", async () => {
+    let sent: Parameters<SendEmail["send"]>[0] | undefined;
+    const env: Pick<Env, "NOTIFICATION_EMAIL"> = {
+      NOTIFICATION_EMAIL: { send: async (message) => { sent = message; return { messageId: "test" }; } },
+    };
+
+    await notifyOwnerOfHandoff(env, {
+      name: "Visitor <script>",
+      email: "visitor@example.com",
+      company: "Example & Co",
+      intent: "Discuss technical sales",
+      workspaceId: "private-id",
+      origin: "https://portfolio.example.com",
+    });
+
+    expect(sent?.subject).toBe("New persistent portfolio chat from Visitor <script>");
+    expect(sent?.to).toBe("oskarmansanqu@icloud.com");
+    expect(sent?.html).toContain("Visitor &lt;script&gt;");
+    expect(sent?.text).toContain("/admin?workspace=private-id");
   });
 });
 
