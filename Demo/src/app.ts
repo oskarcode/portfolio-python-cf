@@ -1,4 +1,5 @@
 // Application ownership: Hono route composition and security boundaries for every Worker API.
+// Hono provides the Worker router and CORS middleware; application modules below own domain behavior.
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { getPost, importMediumFeed, listPosts, savePost } from "./data/blog";
@@ -103,14 +104,22 @@ app.post("/api/chat", async (c) => {
 
 /**
  * Input:
- * - POST /api/handoff with path, query, or JSON values defined in the handler.
+ * - GET /api/calendar/slots without visitor identity.
  * Output:
- * - A JSON response or empty success response with an explicit HTTP status.
+ * - JSON containing currently open consultation slots.
  * What this function does:
- * - It enforces the route boundary, calls the owning service, and maps failures through Hono.
+ * - It exposes availability while leaving booking identity inside persistent workspaces.
  */
 app.get("/api/calendar/slots", async (c) => c.json({ slots: await listOpenSlots(c.env.DB) }));
 
+/**
+ * Input:
+ * - A confirmed booking ID in the calendar download URL.
+ * Output:
+ * - An iCalendar attachment or a JSON 404.
+ * What this function does:
+ * - It renders the fixed Meet URL and 24-hour alarm for one confirmed booking.
+ */
 app.get("/api/calendar/bookings/:id/calendar.ics", async (c) => {
   const id = c.req.param("id");
   if (!id) return c.json({ error: "Booking not found" }, 404);
@@ -119,6 +128,14 @@ app.get("/api/calendar/bookings/:id/calendar.ics", async (c) => {
   return new Response(bookingIcs(value, c.env.MEETING_URL), { headers: { "Content-Type": "text/calendar; charset=utf-8", "Content-Disposition": `attachment; filename="oskar-consultation-${value.id}.ics"` } });
 });
 
+/**
+ * Input:
+ * - A consultation slot ID and opaque active workspace ID.
+ * Output:
+ * - The confirmed booking, calendar URL, and meeting URL.
+ * What this function does:
+ * - It ignores browser identity fields, reuses verified D1 lead details, persists confirmation, and queues transactional email.
+ */
 app.post("/api/calendar/bookings", async (c) => {
   const input = await c.req.json<{ slotId?: string; workspaceId?: string }>();
   if (!input.slotId || !input.workspaceId) return c.json({ error: "A persistent workspace and consultation time are required" }, 400);
@@ -143,6 +160,14 @@ app.post("/api/calendar/bookings", async (c) => {
   }
 });
 
+/**
+ * Input:
+ * - Consented contact details, intent, and an optional anonymous transcript.
+ * Output:
+ * - The new workspace and lead IDs plus the durable agent acknowledgement.
+ * What this function does:
+ * - It creates the capability URL workspace, D1 lead, durable transcript, participants, and owner alert.
+ */
 app.post("/api/handoff", async (c) => {
   const input = await c.req.json<{
     name?: string; email?: string; company?: string; intent?: string; summary?: string;

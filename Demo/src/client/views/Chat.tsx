@@ -1,5 +1,7 @@
 // Application ownership: Anonymous and durable visitor chat UI, routing, polling, and handoff.
+// React owns the form, state, polling, and synchronous booking-flow ref lifecycles.
 import { FormEvent, useEffect, useRef, useState } from "react";
+// Application modules supply the typed HTTP client, shared payload contracts, and safe response renderer.
 import { api } from "../api";
 import type { CalendarSlot, ChatMessage, WorkspaceMessage } from "../../shared/types";
 import { ChatResponse, responseActions } from "../components/ChatResponse";
@@ -58,6 +60,7 @@ export function Chat() {
   const [bookingProfile, setBookingProfile] = useState<{ name: string; email: string; topic: string } | null>(null);
   const [contact, setContact] = useState({ name: "", email: "", company: "", intent: "" });
   const end = useRef<HTMLDivElement>(null);
+  // This ref changes synchronously so workspace polling cannot erase an in-progress booking prompt.
   const bookingFlowRef = useRef<BookingFlow | null>(null);
 
   useEffect(() => { bookingFlowRef.current = bookingFlow; }, [bookingFlow]);
@@ -76,6 +79,14 @@ export function Chat() {
     return () => { active = false; window.clearInterval(timer); };
   }, [workspaceId]);
 
+  /**
+   * Input:
+   * - No parameters; availability comes from the public calendar API.
+   * Output:
+   * - A Promise that updates chat state with open slots or the no-availability message.
+   * What this function does:
+   * - It protects the local booking prompt from workspace polling and presents live slots by number.
+   */
   const showAvailability = async () => {
     bookingFlowRef.current = { step: "slot", slots: [] };
     const { slots } = await api.calendarSlots();
@@ -90,6 +101,14 @@ export function Chat() {
     setMessages((value) => [...value, { role: "assistant", sender: "agent", senderName: "Portfolio Agent", content: `Here are Oskar’s available times in your timezone:\n\n${slots.map((slot, index) => `${index + 1}. **${formatSlot(slot.startsAt)}** · ${Math.round((new Date(slot.endsAt).valueOf() - new Date(slot.startsAt).valueOf()) / 60_000)} minutes`).join("\n")}\n\nReply with the **number** you want, or type **cancel**.` }]);
   };
 
+  /**
+   * Input:
+   * - The consultation slot selected by the visitor.
+   * Output:
+   * - A Promise that displays the confirmed booking or a recoverable error.
+   * What this function does:
+   * - It books through the active workspace so the server can reuse verified handoff details.
+   */
   const reserveSlot = async (slot: CalendarSlot) => {
     setBusy(true);
     try {
@@ -102,6 +121,14 @@ export function Chat() {
     finally { setBusy(false); }
   };
 
+  /**
+   * Input:
+   * - Text submitted from the composer or a starter action.
+   * Output:
+   * - A Promise that updates the visible conversation.
+   * What this function does:
+   * - It routes booking steps, anonymous model questions, and explicit persistent recipients.
+   */
   const send = async (text: string) => {
     const answer = text.trim();
     if (!answer || busy) return;
@@ -175,7 +202,24 @@ export function Chat() {
     } finally { setBusy(false); }
   };
 
+  /**
+   * Input:
+   * - The composer form submission event.
+   * Output:
+   * - Nothing; it delegates the current input to send().
+   * What this function does:
+   * - It prevents browser navigation and starts the selected chat route.
+   */
   const submit = (event: FormEvent) => { event.preventDefault(); void send(input); };
+
+  /**
+   * Input:
+   * - The consented handoff or booking form submission event.
+   * Output:
+   * - A Promise that creates the workspace and optionally continues into availability.
+   * What this function does:
+   * - It imports the anonymous transcript, stores verified contact context, and replaces the URL.
+   */
   const createHandoff = async (event: FormEvent) => {
     event.preventDefault(); setBusy(true);
     try {

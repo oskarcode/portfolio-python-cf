@@ -7,6 +7,7 @@ A Cloudflare-native professional portfolio that combines a technical website, lo
 - Publishes a structured technical portfolio and ten-article local blog.
 - Answers anonymous portfolio questions without storing the browser conversation.
 - Converts a chat into a persistent visitor/Oskar/agent workspace only after explicit consent.
+- Creates a persistent workspace before consultation booking, then reuses its verified contact details for availability, confirmation email, Google Meet, and calendar reminders.
 - Gives the admin one chat interface for managed workspaces and visitor collaborations.
 - Attaches web search, one-time scheduling, and reusable skills independently to each workspace.
 - Stores reusable skill files in a durable Cloudflare Computer workspace and runs approved Worker Shell commands.
@@ -39,6 +40,8 @@ Anonymous chat sends bounded message history directly to Workers AI and keeps st
 | Cloudflare Computer + Worker Loader | Git-versioned skill filesystem and isolated Worker Shell execution |
 | Durable Object alarms | One-time scheduled workspace instructions |
 | Cloudflare Access | Production authentication boundary for `/admin*` and `/api/admin/*` |
+| Cloudflare Email Service | Transactional owner alerts and visitor booking confirmations |
+| D1 calendar + Google Meet | Admin-managed availability, collision-safe booking, fixed meeting room, and downloadable `.ics` reminders |
 | R2 | Bound media bucket reserved for portfolio uploads |
 
 ## Project Structure
@@ -68,6 +71,9 @@ Generated or downloaded directories such as `node_modules/`, `dist/`, and `.wran
 | `GET` | `/api/blog`, `/api/blog/:slug` | Read published local articles |
 | `POST` | `/api/chat` | Stateless anonymous portfolio answer |
 | `POST` | `/api/handoff` | Consent-based creation of a durable visitor workspace |
+| `GET` | `/api/calendar/slots` | List open consultation times |
+| `POST` | `/api/calendar/bookings` | Reserve a time using verified details from an active persistent workspace |
+| `GET` | `/api/calendar/bookings/:id/calendar.ics` | Download the confirmed event with its 24-hour reminder |
 | `GET` | `/api/workspaces/:id` | Restore an active capability URL workspace |
 | `POST` | `/api/workspaces/:id/messages` | Explicitly message Oskar or ask the workspace agent |
 
@@ -125,6 +131,8 @@ npm run deploy
 - Anonymous chat is stateless on the server but still sends bounded conversation content to Workers AI.
 - `/chat/:workspaceId` is an opaque capability URL. Anyone holding it can access that visitor workspace.
 - Persistent storage begins only after explicit consent and contact validation.
+- Consultation booking requires an active persistent workspace; the booking route reads name, email, and topic from D1 rather than accepting browser-supplied identity fields.
+- Transactional email is invoked only by fixed handoff and booking behavior; agents do not receive a generic email tool.
 - Visitor-to-owner messages bypass model inference.
 - Workspace skill allowlists are checked by server-side tool implementations, not only by the UI.
 - Cloudflare Computer and Worker Loader are preview technologies. Commands execute in an isolated Worker Shell with a bounded command set and timeout.
@@ -138,6 +146,7 @@ npm run deploy
 | --- | --- | --- |
 | Change portfolio copy or section layout | `src/client/views/Website.tsx`, D1 `site_sections` | `src/data/content.ts`, content-agent tools |
 | Change chat behavior | `src/agent/prompt.ts` | `src/agent/session.ts`, `src/client/views/Chat.tsx` |
+| Change consultation booking | `src/client/views/Chat.tsx`, `src/data/calendar.ts` | `src/app.ts`, `src/notifications/email.ts`, `src/calendar/ics.ts` |
 | Add an agent tool | `src/agent/tools.ts` | registration and permission selection in `src/agent/session.ts` |
 | Add a workspace integration | `src/data/workspaces.ts` | capability UI, D1 migration, session tool selection |
 | Change skill execution | `src/skills/hub.ts` | `src/skills/tools.ts`, Worker Loader binding |
@@ -154,6 +163,9 @@ npm run deploy
 | Skill is unavailable | Skill enabled state, audience, and workspace attachment |
 | Computer command fails | `SKILL_LOADER`, `experimental` compatibility flag, command availability, and stderr |
 | Schedule never runs | Durable Object alarm state and `PortfolioSession.alarm()` logs |
+| Booking form does not appear | Booking-intent matching and `handoffPurpose` in `src/client/views/Chat.tsx` |
+| Booking is rejected | Confirm the workspace exists, is active, and the selected D1 slot remains open |
+| Confirmation email is missing | `NOTIFICATION_EMAIL`, Email Sending DNS, and structured `booking_*_failed` logs |
 | Content missing | Migration status and published rows returned by `/api/content` or `/api/blog` |
 | Type errors after binding changes | Run `npm run types`, then `npm run check` |
 | Deployment rejects a Durable Object change | Add a new immutable migration tag; never rewrite an applied tag |

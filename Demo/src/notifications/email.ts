@@ -3,6 +3,14 @@
 const OWNER_NOTIFICATION_ADDRESS = "oskarmansanqu@icloud.com";
 const SENDER_ADDRESS = "portfolio@oskarcode.com";
 
+/**
+ * Input:
+ * - The typed values shown in escapeHtml’s signature.
+ * Output:
+ * - The declared value or Promise; failures follow the caller’s existing boundary.
+ * What this function does:
+ * - It escapes visitor-controlled text before interpolation into fixed HTML templates.
+ */
 const escapeHtml = (value: string) => value.replace(/[&<>'"]/g, (character) => ({
   "&": "&amp;",
   "<": "&lt;",
@@ -11,13 +19,28 @@ const escapeHtml = (value: string) => value.replace(/[&<>'"]/g, (character) => (
   '"': "&quot;",
 })[character] ?? character);
 
+/**
+ * Input:
+ * - The typed values shown in utcMeetingTime’s signature.
+ * Output:
+ * - The declared value or Promise; failures follow the caller’s existing boundary.
+ * What this function does:
+ * - It renders one deterministic UTC time range for transactional email.
+ */
 const utcMeetingTime = (startsAt: string, endsAt: string) => {
   const day = new Intl.DateTimeFormat("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric", timeZone: "UTC" }).format(new Date(startsAt));
   const time = new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit", timeZone: "UTC" });
   return `${day} · ${time.format(new Date(startsAt))}–${time.format(new Date(endsAt))} UTC`;
 };
 
-/** Sends the visitor a transactional booking confirmation with meeting and reminder links. */
+/**
+ * Input:
+ * - The typed values shown in sendBookingConfirmation’s signature.
+ * Output:
+ * - The declared value or Promise; failures follow the caller’s existing boundary.
+ * What this function does:
+ * - It sends the visitor the fixed booking, Meet, and calendar reminder message.
+ */
 export async function sendBookingConfirmation(env: Pick<Env, "NOTIFICATION_EMAIL">, input: {
   bookingId: string; name: string; email: string; topic: string; startsAt: string; endsAt: string; origin: string; meetingUrl: string;
 }): Promise<void> {
@@ -33,7 +56,14 @@ export async function sendBookingConfirmation(env: Pick<Env, "NOTIFICATION_EMAIL
   });
 }
 
-/** Sends Oskar a transactional alert after a consultation is booked. */
+/**
+ * Input:
+ * - The typed values shown in notifyOwnerOfBooking’s signature.
+ * Output:
+ * - The declared value or Promise; failures follow the caller’s existing boundary.
+ * What this function does:
+ * - It sends Oskar the fixed owner alert for a confirmed consultation.
+ */
 export async function notifyOwnerOfBooking(env: Pick<Env, "NOTIFICATION_EMAIL">, input: {
   bookingId: string; name: string; email: string; topic: string; startsAt: string; endsAt: string; origin: string; meetingUrl: string;
 }): Promise<void> {
@@ -48,6 +78,14 @@ export async function notifyOwnerOfBooking(env: Pick<Env, "NOTIFICATION_EMAIL">,
   });
 }
 
+/**
+ * Input:
+ * - The typed values shown in notifyOwnerOfHandoff’s signature.
+ * Output:
+ * - The declared value or Promise; failures follow the caller’s existing boundary.
+ * What this function does:
+ * - It sends Oskar the fixed owner alert for a consent-created workspace.
+ */
 export async function notifyOwnerOfHandoff(env: Pick<Env, "NOTIFICATION_EMAIL">, input: {
   name: string;
   email: string;

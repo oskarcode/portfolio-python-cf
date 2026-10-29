@@ -1,9 +1,34 @@
 // Application ownership: Downloadable calendar confirmations with a local 24-hour reminder.
+// The shared booking contract supplies the event identity, attendee context, and timestamps.
 import type { CalendarBooking } from "../shared/types";
 
+/**
+ * Input:
+ * - The typed values shown in escapeIcs’s signature.
+ * Output:
+ * - The declared value or Promise; failures follow the caller’s existing boundary.
+ * What this function does:
+ * - It escapes text according to iCalendar field rules.
+ */
 const escapeIcs = (value: string) => value.replace(/\\/g, "\\\\").replace(/\n/g, "\\n").replace(/,/g, "\\,").replace(/;/g, "\\;");
+/**
+ * Input:
+ * - The typed values shown in stamp’s signature.
+ * Output:
+ * - The declared value or Promise; failures follow the caller’s existing boundary.
+ * What this function does:
+ * - It converts a date into the compact UTC timestamp required by iCalendar.
+ */
 const stamp = (value: string | Date) => new Date(value).toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
 
+/**
+ * Input:
+ * - The typed values shown in bookingIcs’s signature.
+ * Output:
+ * - The declared value or Promise; failures follow the caller’s existing boundary.
+ * What this function does:
+ * - It builds a downloadable event containing Meet details and a 24-hour display alarm.
+ */
 export function bookingIcs(value: CalendarBooking, meetingUrl: string): string {
   return [
     "BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Oskar Ablimit//Portfolio Calendar//EN", "CALSCALE:GREGORIAN", "METHOD:PUBLISH",

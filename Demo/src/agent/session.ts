@@ -1,4 +1,5 @@
 // Application ownership: Pi Durable workspace lifecycle, transcript persistence, tools, and alarms.
+// Cloudflare and Pi Durable imports provide the platform class, durable harness, entries, model adapter, and storage backend.
 import { DurableObject } from "cloudflare:workers";
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import { createModels } from "@earendil-works/pi-ai/models";
