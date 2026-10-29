@@ -89,7 +89,7 @@ export function responseActions(content: string, persistent: boolean): Action[] 
   if (/article|blog|writing|medium/.test(text)) add({ label: "Browse technical writing", href: "/blog" });
   if (/teach|course|student|education|workshop/.test(text)) add({ label: "See teaching", href: "/#teaching" });
   if (/experience|career|sales engineer|background/.test(text)) add({ label: "View experience", href: "/#experience" });
-  if (/cloudflare|security|zero trust|worker|agent|architecture/.test(text)) add({ label: "Explore capabilities", href: "/#capabilities" });
+  if (/cloudflare|security|zero trust|worker|agent|architecture/.test(text)) add({ label: "Explore main expertise", href: "/#expertise" });
   if (!persistent && /oskar|contact|work together|help you|next step|conversation/.test(text)) add({ label: "Add Oskar", prompt: "I want to add Oskar to this conversation" });
   return actions;
 }

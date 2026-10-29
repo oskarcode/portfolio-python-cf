@@ -16,7 +16,7 @@ export function Layout({ children }: { children: ReactNode }) {
       <a className="brand" href="/"><span className="brand-mark">OA</span><span><strong>Oskar Ablimit</strong><small>Senior Customer Engineer</small></span></a>
       <nav aria-label="Main navigation">
         <a href="/#profile">Profile</a>
-        <a href="/#focus">Focus</a>
+        <a href="/#expertise">Main expertise</a>
         <a href="/#work">Selected work</a>
         <a href="/#experience">Experience</a>
         <a href="/#writing">Writing</a>

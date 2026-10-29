@@ -21,12 +21,12 @@ type Item = {
 };
 
 type Link = { label?: string; href?: string };
-type ModuleId = "profile" | "focus" | "work" | "experience" | "teaching" | "writing" | "consulting" | "contact";
-type FocusId = "cloud" | "cybersecurity" | "infrastructure" | "networking" | "agentic-ai" | "agent-harness" | "technical-teaching" | "b2b-technical-sales";
+type ModuleId = "profile" | "expertise" | "work" | "experience" | "teaching" | "writing" | "consulting" | "contact";
+type ExpertiseId = "cloud" | "cybersecurity" | "infrastructure" | "networking" | "agentic-ai" | "agent-harness" | "technical-teaching" | "b2b-technical-sales";
 
 type ContentBlock =
   | { type: "profile"; achievements: string[]; education: Item[] }
-  | { type: "focus"; areas: FocusArea[] }
+  | { type: "expertise"; areas: ExpertiseArea[] }
   | { type: "projects"; projects: Item[] }
   | { type: "timeline"; roles: Item[] }
   | { type: "teaching"; school: string; audience: string; course: string; body: string; outcomes: string[]; syllabus: Item[]; feedbackSummary: string; feedbackHighlights: string[]; feedbackImprovements: string[]; links: Link[] }
@@ -46,21 +46,21 @@ type PortfolioModule = {
   blocks: ContentBlock[];
 };
 
-type FocusArea = {
-  id: FocusId;
+type ExpertiseArea = {
+  id: ExpertiseId;
   title: string;
   summary: string;
   evidence: string[];
 };
 
-const MODULE_ORDER: ModuleId[] = ["profile", "focus", "work", "experience", "teaching", "writing", "consulting", "contact"];
+const MODULE_ORDER: ModuleId[] = ["profile", "expertise", "work", "experience", "teaching", "writing", "consulting", "contact"];
 const string = (value: unknown) => typeof value === "string" ? value : "";
 const strings = (value: unknown) => Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
 const items = (section: SiteSection | undefined, key = "items") => section && Array.isArray(section.content[key]) ? section.content[key] as Item[] : [];
 const sectionById = (sections: SiteSection[], id: string) => sections.find((section) => section.id === id);
 const isModuleId = (value: string): value is ModuleId => MODULE_ORDER.includes(value as ModuleId);
 
-function focusAreas(capabilities: Item[]): FocusArea[] {
+function expertiseAreas(capabilities: Item[]): ExpertiseArea[] {
   const capability = (id: string) => capabilities.find((item) => item.id === id);
   return [
     { id: "cloud", title: "Cloud platforms", summary: capability("cloudflare")?.body ?? "I build full-stack, serverless agentic workflows on Cloudflare using open-source harnesses and the Workers developer platform.", evidence: capability("cloudflare")?.tags ?? ["Workers", "Durable Objects", "D1", "R2", "Workers AI", "AI Gateway"] },
@@ -84,7 +84,7 @@ function buildModules(sections: SiteSection[], posts: BlogPost[]): Record<Module
   const service = sectionById(sections, "work");
   const consulting = sectionById(sections, "consulting");
   const contact = sectionById(sections, "contact");
-  const focus = focusAreas(capabilities);
+  const expertise = expertiseAreas(capabilities);
   const education = items(credentials, "education").filter((item) => !/bachelor/i.test(item.title ?? ""));
   const certifications = strings(credentials?.content.certifications);
   const links = Array.isArray(contact?.content.links) ? contact.content.links as Link[] : [];
@@ -102,11 +102,11 @@ function buildModules(sections: SiteSection[], posts: BlogPost[]): Record<Module
 };`,
       blocks: [{ type: "profile", achievements: ["Top-10% enterprise performer", "$1M+ quota achievement", "Cloudflare-recognized AI Wizard", "Experience across APAC, EMEA, and North America", ...certifications.slice(0, 3)], education }],
     },
-    focus: {
-      id: "focus", file: "focus.ts", path: "src/focus.ts", language: "ts", kicker: "TECHNICAL FOCUS",
+    expertise: {
+      id: "expertise", file: "main-expertise.ts", path: "src/main-expertise.ts", language: "ts", kicker: "MAIN EXPERTISE",
       title: "Main expertise",
       summary: "Eight areas where hands-on engineering, customer work, teaching, and technical sales come together.",
-      code: `export const focus: FocusArea[] = [
+      code: `export const mainExpertise: ExpertiseArea[] = [
   cloud,
   cybersecurity,
   infrastructure,
@@ -116,7 +116,7 @@ function buildModules(sections: SiteSection[], posts: BlogPost[]): Record<Module
   technicalTeaching,
   b2bTechnicalSales,
 ];`,
-      blocks: [{ type: "focus", areas: focus }],
+      blocks: [{ type: "expertise", areas: expertise }],
     },
     work: {
       id: "work", file: "selected-work.ts", path: "src/selected-work.ts", language: "ts", kicker: "WORKING EVIDENCE",
@@ -221,14 +221,14 @@ function Explorer({ modules, active, srcOpen, onToggle, onOpen }: { modules: Rec
   return <div className="cp-tree"><button type="button" className="cp-folder cp-src-root" onClick={onToggle} aria-expanded={srcOpen}><span>{srcOpen ? "⌄" : "›"}</span><strong>src</strong><small>{MODULE_ORDER.length}</small></button>{srcOpen && <div className="cp-src">{MODULE_ORDER.map(file)}</div>}</div>;
 }
 
-function FocusBlock({ areas }: { areas: FocusArea[] }) {
-  return <div className="cp-focus-grid">{areas.map((item, index) => <article key={item.id}><span>{String(index + 1).padStart(2, "0")}</span><strong>{item.title}</strong><p>{item.summary}</p><small>{item.evidence.join(" · ")}</small></article>)}</div>;
+function ExpertiseBlock({ areas }: { areas: ExpertiseArea[] }) {
+  return <div className="cp-expertise-grid">{areas.map((item, index) => <article key={item.id}><span>{String(index + 1).padStart(2, "0")}</span><strong>{item.title}</strong><p>{item.summary}</p><small>{item.evidence.join(" · ")}</small></article>)}</div>;
 }
 
 function BlockRenderer({ block }: { block: ContentBlock }) {
   switch (block.type) {
     case "profile": return <div className="cp-profile"><section><h2>Professional achievements</h2>{block.achievements.map((item) => <p key={item}>✓ {item}</p>)}</section><section><h2>Education</h2>{block.education.map((item) => <div key={item.title}><strong>{item.title}</strong><span>{item.company ?? item.institution}</span><small>{item.period}</small></div>)}</section></div>;
-    case "focus": return <FocusBlock areas={block.areas}/>;
+    case "expertise": return <ExpertiseBlock areas={block.areas}/>;
     case "projects": return <div className="cp-projects">{block.projects.map((project, index) => <a href={project.url} target="_blank" rel="noreferrer" key={project.id ?? project.title}><header><span>{String(index + 1).padStart(2, "0")}</span><b>↗</b></header><h2>{project.title}</h2><p>{project.summary}</p><div>{project.tags?.map((tag) => <span key={tag}>{tag}</span>)}</div></a>)}</div>;
     case "timeline": return <div className="cp-timeline">{block.roles.map((role) => <article key={`${role.company}-${role.title}`}><time>{role.period}</time><div><h2>{role.title}</h2><strong>{role.company}</strong><small>{role.location}</small><p>{role.body}</p></div></article>)}</div>;
     case "teaching": return <div className="cp-teaching"><div className="cp-teaching-context"><article><span>WHERE</span><strong>{block.school}</strong><small>{block.course}</small></article><article><span>WHO</span><strong>{block.audience}</strong><small>Graduate cloud computing</small></article></div><p className="cp-teaching-overview">{block.body}</p><section><span>LEARNING OUTCOMES</span><h2>What students leave able to do</h2><div className="cp-outcomes">{block.outcomes.map((outcome) => <p key={outcome}>✓ {outcome}</p>)}</div></section><section><span>COURSE SYLLABUS</span><h2>Concepts paired with implementation</h2><div className="cp-syllabus">{block.syllabus.map((lesson) => <article key={lesson.classNumber ?? lesson.title}><b>{String(lesson.classNumber ?? "").padStart(2, "0")}</b><div><h3>{lesson.title}</h3><p>{lesson.content}</p><small>{lesson.project && lesson.project !== "N/A" ? `Project: ${lesson.project}` : "Concept session"}</small></div></article>)}</div></section><section><span>STUDENT FEEDBACK</span><h2>What students reported</h2><p className="cp-feedback-summary">{block.feedbackSummary}</p><div className="cp-feedback-grid"><article><strong>Highlights</strong>{block.feedbackHighlights.map((item) => <p key={item}>✓ {item}</p>)}</article><article><strong>Opportunities to improve</strong>{block.feedbackImprovements.map((item) => <p key={item}>→ {item}</p>)}</article></div></section><div className="cp-teaching-links">{block.links.map((link) => <a href={link.href} target="_blank" rel="noreferrer" key={link.label}>{link.label} ↗</a>)}</div></div>;
@@ -247,13 +247,14 @@ function CommandPalette({ modules, onClose, onOpen }: { modules: Record<ModuleId
   const input = useRef<HTMLInputElement>(null);
   useEffect(() => input.current?.focus(), []);
   const results = MODULE_ORDER.filter((id) => `${modules[id].file} ${modules[id].title} ${modules[id].summary}`.toLowerCase().includes(query.toLowerCase()));
-  return <div className="cp-palette-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><div className="cp-palette" role="dialog" aria-modal="true" aria-label="Open portfolio file"><header><span>⌕</span><input ref={input} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search files, focus areas, or experience…"/><kbd>ESC</kbd></header><div>{results.map((id) => <button type="button" onClick={() => onOpen(id)} key={id}><FileIcon/><span><strong>{modules[id].file}</strong><small>{modules[id].title}</small></span><b>↵</b></button>)}</div></div></div>;
+  return <div className="cp-palette-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><div className="cp-palette" role="dialog" aria-modal="true" aria-label="Open portfolio file"><header><span>⌕</span><input ref={input} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search expertise, projects, or experience…"/><kbd>ESC</kbd></header><div>{results.map((id) => <button type="button" onClick={() => onOpen(id)} key={id}><FileIcon/><span><strong>{modules[id].file}</strong><small>{modules[id].title}</small></span><b>↵</b></button>)}</div></div></div>;
 }
 
 /** Loads public content and operates the portfolio as one Cloudflare Worker project. */
 export function Website() {
   const initial = window.location.hash.slice(1);
-  const [activeId, setActiveId] = useState<ModuleId>(isModuleId(initial) ? initial : "profile");
+  const initialModule = initial === "focus" ? "expertise" : initial;
+  const [activeId, setActiveId] = useState<ModuleId>(isModuleId(initialModule) ? initialModule : "profile");
   const [sections, setSections] = useState<SiteSection[]>([]);
   const [posts, setPosts] = useState<BlogPost[]>([]);
   const [srcOpen, setSrcOpen] = useState(true);
@@ -266,7 +267,7 @@ export function Website() {
   }, []);
 
   useEffect(() => {
-    const sync = () => { const value = window.location.hash.slice(1); if (isModuleId(value)) setActiveId(value); };
+    const sync = () => { const hash = window.location.hash.slice(1); const value = hash === "focus" ? "expertise" : hash; if (isModuleId(value)) setActiveId(value); };
     const keyboard = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") { event.preventDefault(); setPaletteOpen(true); }
       if (event.key === "Escape") setPaletteOpen(false);
