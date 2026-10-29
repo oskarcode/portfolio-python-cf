@@ -20,6 +20,7 @@ export function Layout({ children }: { children: ReactNode }) {
         <a href="/#work">Selected work</a>
         <a href="/#experience">Experience</a>
         <a href="/#writing">Writing</a>
+        <a href="/#consulting">Consulting</a>
       </nav>
       <a className={`header-blog-link ${path.startsWith("/blog") ? "active" : ""}`} href="/blog">Blog</a>
       <a className="chat-link" href="/chat">Chat <span>↗</span></a>
