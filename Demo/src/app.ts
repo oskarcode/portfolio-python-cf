@@ -12,7 +12,7 @@ import type { BlogPost, ChatMessage, Lead, SiteSection } from "./shared/types";
 import type { SaveSkillInput } from "./skills/types";
 import { createAdminWorkspace, listAdminWorkspaces, managedWorkspace, saveWorkspaceCapabilities, workspaceCapabilities } from "./data/workspaces";
 import type { WorkspaceCapabilities } from "./shared/types";
-import { notifyOwnerOfBooking, notifyOwnerOfHandoff } from "./notifications/email";
+import { notifyOwnerOfBooking, notifyOwnerOfHandoff, sendBookingConfirmation } from "./notifications/email";
 import { bookingIcs } from "./calendar/ics";
 import { cancelSlot, createBooking, createSlot, getBooking, listCalendar, listOpenSlots } from "./data/calendar";
 
@@ -123,7 +123,11 @@ app.post("/api/calendar/bookings", async (c) => {
   if (!input.slotId || !input.name?.trim() || !input.email?.match(/^[^\s@]+@[^\s@]+\.[^\s@]+$/) || !input.topic?.trim()) return c.json({ error: "A time, name, valid email, and topic are required" }, 400);
   try {
     const value = await createBooking(c.env.DB, { slotId: input.slotId, workspaceId: input.workspaceId, name: input.name.trim().slice(0, 120), email: input.email.trim().slice(0, 254), topic: input.topic.trim().slice(0, 1_000) });
-    c.executionCtx.waitUntil(notifyOwnerOfBooking(c.env, { ...value, bookingId: value.id, origin: new URL(c.req.url).origin }).catch((error: unknown) => console.error(JSON.stringify({ event: "booking_notification_failed", bookingId: value.id, error: error instanceof Error ? error.message : String(error) }))));
+    const emailInput = { ...value, bookingId: value.id, origin: new URL(c.req.url).origin };
+    c.executionCtx.waitUntil(Promise.all([
+      notifyOwnerOfBooking(c.env, emailInput).catch((error: unknown) => console.error(JSON.stringify({ event: "booking_owner_notification_failed", bookingId: value.id, error: error instanceof Error ? error.message : String(error) }))),
+      sendBookingConfirmation(c.env, emailInput).catch((error: unknown) => console.error(JSON.stringify({ event: "booking_confirmation_failed", bookingId: value.id, error: error instanceof Error ? error.message : String(error) }))),
+    ]).then(() => undefined));
     return c.json({ booking: value, calendarUrl: `/api/calendar/bookings/${value.id}/calendar.ics` }, 201);
   } catch (error) {
     return c.json({ error: error instanceof Error ? error.message : "Could not book this time" }, 409);

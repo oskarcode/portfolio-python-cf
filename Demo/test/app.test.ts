@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import app from "../src/app";
 import { OWNER_PROMPT, VISITOR_PROMPT } from "../src/agent/prompt";
 import { createSkillTools, type SkillHubCaller } from "../src/skills/tools";
-import { notifyOwnerOfBooking, notifyOwnerOfHandoff } from "../src/notifications/email";
+import { notifyOwnerOfBooking, notifyOwnerOfHandoff, sendBookingConfirmation } from "../src/notifications/email";
 import { bookingIcs } from "../src/calendar/ics";
 
 describe("API boundaries", () => {
@@ -67,6 +67,12 @@ describe("transactional notifications", () => {
     const calendar = bookingIcs(value);
     expect(calendar).toContain("TRIGGER:-PT24H");
     expect(calendar).toContain("DTSTART:20300102T150000Z");
+
+    await sendBookingConfirmation(env, { ...value, bookingId: value.id, origin: "https://portfolio.example.com" });
+    expect(sent?.to).toBe("visitor@example.com");
+    expect(sent?.subject).toBe("Your consultation with Oskar Ablimit is confirmed");
+    expect(sent?.text).toContain("/api/calendar/bookings/booking-1/calendar.ics");
+    expect(sent?.html).toContain("24-hour reminder");
   });
 });
 

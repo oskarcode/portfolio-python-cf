@@ -22,8 +22,7 @@
   "ai": { "binding": "AI" },
   "send_email": [
     {
-      "name": "NOTIFICATION_EMAIL",
-      "destination_address": "oskarmansanqu@icloud.com"
+      "name": "NOTIFICATION_EMAIL"
     }
   ],
   "vars": {

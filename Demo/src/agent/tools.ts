@@ -4,7 +4,7 @@ import { defineTool } from "@earendil-works/pi-durable";
 import { getSection, listSections, saveSection } from "../data/content";
 import { getPost, listPosts, savePost } from "../data/blog";
 import { createBooking, listOpenSlots } from "../data/calendar";
-import { notifyOwnerOfBooking } from "../notifications/email";
+import { notifyOwnerOfBooking, sendBookingConfirmation } from "../notifications/email";
 
 const output = (value: unknown) => ({ output: [{ type: "text" as const, text: JSON.stringify(value) }] });
 
@@ -51,8 +51,11 @@ export function createPortfolioTools(env: Pick<Env, "DB" | "NOTIFICATION_EMAIL" 
     parameters: Type.Object({ slotId: Type.String(), name: Type.String(), email: Type.String(), topic: Type.String(), workspaceId: Type.Optional(Type.String()) }),
     execute: async (args) => {
       const value = await createBooking(db, args);
-      await notifyOwnerOfBooking(env, { ...value, bookingId: value.id, origin: env.PUBLIC_URL }).catch((error: unknown) => console.error(JSON.stringify({ event: "booking_notification_failed", bookingId: value.id, error: error instanceof Error ? error.message : String(error) })));
-      return output({ booking: value, calendarUrl: `/api/calendar/bookings/${value.id}/calendar.ics`, reminder: "Download the calendar file to add the meeting and its 24-hour reminder." });
+      const emailInput = { ...value, bookingId: value.id, origin: env.PUBLIC_URL };
+      const [ownerEmail, visitorEmail] = await Promise.allSettled([notifyOwnerOfBooking(env, emailInput), sendBookingConfirmation(env, emailInput)]);
+      if (ownerEmail.status === "rejected") console.error(JSON.stringify({ event: "booking_owner_notification_failed", bookingId: value.id, error: String(ownerEmail.reason) }));
+      if (visitorEmail.status === "rejected") console.error(JSON.stringify({ event: "booking_confirmation_failed", bookingId: value.id, error: String(visitorEmail.reason) }));
+      return output({ booking: value, calendarUrl: `/api/calendar/bookings/${value.id}/calendar.ics`, confirmationEmail: visitorEmail.status === "fulfilled" ? "sent" : "failed", reminder: "The calendar download includes a 24-hour reminder." });
     },
   });
   return [readPortfolio, readSection, readBlog, availability, book] as const;

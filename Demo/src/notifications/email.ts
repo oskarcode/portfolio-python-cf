@@ -11,6 +11,23 @@ const escapeHtml = (value: string) => value.replace(/[&<>'"]/g, (character) => (
   '"': "&quot;",
 })[character] ?? character);
 
+/** Sends the visitor a transactional booking confirmation with a local calendar reminder. */
+export async function sendBookingConfirmation(env: Pick<Env, "NOTIFICATION_EMAIL">, input: {
+  bookingId: string; name: string; email: string; topic: string; startsAt: string; endsAt: string; origin: string;
+}): Promise<void> {
+  const start = new Date(input.startsAt);
+  const end = new Date(input.endsAt);
+  const when = `${start.toUTCString()}–${end.toUTCString()}`;
+  const calendarUrl = `${input.origin}/api/calendar/bookings/${encodeURIComponent(input.bookingId)}/calendar.ics`;
+  await env.NOTIFICATION_EMAIL.send({
+    from: { email: "calendar@oskarcode.com", name: "Oskar Ablimit" },
+    to: input.email,
+    subject: "Your consultation with Oskar Ablimit is confirmed",
+    text: `Hi ${input.name},\n\nYour consultation with Oskar Ablimit is confirmed.\n\nWhen: ${when}\nTopic: ${input.topic}\n\nAdd the meeting and its 24-hour reminder to your calendar: ${calendarUrl}\n\nThis transactional message was sent because you booked through Oskar's portfolio chat.`,
+    html: `<h1>Your consultation is confirmed</h1><p>Hi ${escapeHtml(input.name)},</p><p>Your consultation with Oskar Ablimit is booked.</p><dl><dt>When</dt><dd>${escapeHtml(when)}</dd><dt>Topic</dt><dd>${escapeHtml(input.topic)}</dd></dl><p><a href="${escapeHtml(calendarUrl)}">Add to calendar with a 24-hour reminder</a></p><p><small>This transactional message was sent because you booked through Oskar's portfolio chat.</small></p>`,
+  });
+}
+
 /** Sends Oskar a transactional alert after a consultation is booked. */
 export async function notifyOwnerOfBooking(env: Pick<Env, "NOTIFICATION_EMAIL">, input: {
   bookingId: string; name: string; email: string; topic: string; startsAt: string; endsAt: string; origin: string;
