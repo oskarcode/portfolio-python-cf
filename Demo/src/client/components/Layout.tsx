@@ -25,6 +25,6 @@ export function Layout({ children }: { children: ReactNode }) {
       <a className={`header-blog-link ${path.startsWith("/blog") ? "active" : ""}`} href="/blog">Blog</a>
     </header>
     <main>{children}</main>
-    <footer><div><strong>Oskar Ablimit</strong><p>Cloud · Security · AI · Solutions Engineering</p></div><div className="footer-links"><a href="https://www.linkedin.com/in/cloudflareoskar/">LinkedIn</a><a href="https://github.com/oskarcode">GitHub</a><a href="/blog">Technical writing</a><a href="/chat">Chat</a></div></footer>
+    <footer><div><strong>Oskar Ablimit</strong><p>Cloud · Security · AI · Solutions Engineering</p></div><div className="footer-links"><a href="https://www.linkedin.com/in/cloudflareoskar/">LinkedIn</a><a href="https://github.com/oskarcode">GitHub</a><a href="/blog">Technical writing</a><a href="/chat?prompt=Help%20me%20explore%20Oskar%E2%80%99s%20portfolio%20and%20find%20the%20most%20relevant%20place%20to%20start.">Chat</a></div></footer>
   </>;
 }
