@@ -217,6 +217,9 @@ describe("transactional notifications", () => {
 describe("agent controls", () => {
   it("keeps visitor and owner responsibilities separate", () => {
     expect(VISITOR_PROMPT).toContain("Never ask for personal information");
+    expect(VISITOR_PROMPT).toContain("If they write in Chinese, reply in natural Chinese");
+    expect(VISITOR_PROMPT).toContain("Simplified Chinese by default");
+    expect(VISITOR_PROMPT).toContain("follow Traditional Chinese");
     expect(VISITOR_PROMPT).toContain("cannot edit content or skills");
     expect(VISITOR_PROMPT).toContain("Never execute arbitrary commands");
     expect(VISITOR_PROMPT).toContain("external Google Calendar appointment schedule is retired");
