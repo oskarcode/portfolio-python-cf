@@ -70,7 +70,7 @@ export function Chat() {
     let active = true;
     const refresh = () => api.workspaceHistory(workspaceId).then((data) => {
       if (active) {
-        if (!bookingFlowRef.current) setMessages(data.messages.map(displayWorkspace));
+        if (!bookingFlowRef.current) setMessages(data.messages.length ? data.messages.map(displayWorkspace) : [{ role: "assistant", sender: "agent", senderName: "Portfolio Agent", content: "Welcome to your private workspace with Oskar. You can message Oskar directly or ask the agent for help using the tools and skills Oskar has approved here." }]);
         setBookingProfile(data.bookingProfile ?? null);
       }
     }).catch(() => undefined);

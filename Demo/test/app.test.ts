@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import app from "../src/app";
 import { OWNER_PROMPT, VISITOR_PROMPT } from "../src/agent/prompt";
 import { createSkillTools, type SkillHubCaller } from "../src/skills/tools";
-import { notifyOwnerOfBooking, notifyOwnerOfHandoff, sendBookingConfirmation } from "../src/notifications/email";
+import { notifyOwnerOfBooking, notifyOwnerOfHandoff, sendBookingConfirmation, sendWorkspaceInvitation } from "../src/notifications/email";
 import { bookingIcs } from "../src/calendar/ics";
 import { createOwnerTools } from "../src/agent/tools";
 import { createScheduleTools } from "../src/agent/scheduling";
@@ -71,23 +71,43 @@ describe("admin workspace catalog", () => {
     expect(workspaces.filter((workspace) => workspace.kind === "visitor")).toHaveLength(7);
   });
 
-  it("automatically exposes every managed-workspace capability and enabled content skill", async () => {
+  it("creates an invited workspace and emails its private capability URL", async () => {
+    let sent: Parameters<SendEmail["send"]>[0] | undefined;
+    let batchSql: string[] = [];
     const db = {
-      prepare: (sql: string) => ({ bind: () => ({ first: async () => sql.includes("admin_workspaces") ? { id: "managed-1", title: "Managed", purpose: "Test", status: "active" } : null }) }),
+      prepare: (sql: string) => ({ bind: () => ({ sql }) }),
+      batch: async (statements: Array<{ sql: string }>) => { batchSql = statements.map((statement) => statement.sql); return []; },
     } as unknown as D1Database;
     const env = {
       DB: db,
-      SKILL_HUB: { getByName: () => ({ listSkills: async () => [
-        { slug: "enabled-skill", name: "Enabled", description: "Available", audience: "content", enabled: true, updatedAt: "2030-01-01", updatedBy: "test" },
-        { slug: "disabled-skill", name: "Disabled", description: "Unavailable", audience: "content", enabled: false, updatedAt: "2030-01-01", updatedBy: "test" },
-      ] }) },
+      SKILL_HUB: { getByName: () => ({ listSkills: async () => [] }) },
+      NOTIFICATION_EMAIL: { send: async (message: Parameters<SendEmail["send"]>[0]) => { sent = message; return { messageId: "test" }; } },
     } as unknown as Env;
+    const response = await app.request("http://localhost/api/admin/workspaces", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title: "Architecture review", purpose: "Review an edge design", guestEmail: "guest@example.com", guestName: "Guest" }) }, env);
+    expect(response.status).toBe(201);
+    const body = await response.json() as { id: string; invitationEmail: string };
+    expect(body.invitationEmail).toBe("sent");
+    expect(sent?.to).toBe("guest@example.com");
+    expect(sent?.text).toContain(`/chat/${body.id}`);
+    expect(batchSql.some((sql) => sql.includes("INSERT INTO workspace_members"))).toBe(true);
+    expect(batchSql.some((sql) => sql.includes("INSERT INTO workspace_capabilities"))).toBe(true);
+  });
+
+  it("lets only the admin API select a workspace's complete tool set", async () => {
+    let values = ["portfolio-read", "web-search", "skill:enabled-skill"];
+    const db = {
+      prepare: (sql: string) => ({ bind: (...args: unknown[]) => ({ sql, args, all: async () => ({ results: values.map((capability) => ({ capability })) }) }) }),
+      batch: async (statements: Array<{ sql: string; args: unknown[] }>) => { values = statements.filter((statement) => statement.sql.includes("INSERT INTO workspace_capabilities")).map((statement) => String(statement.args[1])); return []; },
+    } as unknown as D1Database;
+    const env = { DB: db } as unknown as Env;
 
     const response = await app.request("http://localhost/api/admin/workspaces/managed-1/capabilities", {}, env);
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ webSearch: true, scheduling: true, skillSlugs: ["enabled-skill"] });
-    const update = await app.request("http://localhost/api/admin/workspaces/managed-1/capabilities", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ webSearch: false, scheduling: false, skillSlugs: [] }) }, env);
-    expect(update.status).toBe(409);
+    expect(await response.json()).toEqual({ portfolioRead: true, blogRead: false, consultation: false, webSearch: true, scheduling: false, skillSlugs: ["enabled-skill"] });
+    const selected = { portfolioRead: true, blogRead: true, consultation: true, webSearch: false, scheduling: true, skillSlugs: [] };
+    const update = await app.request("http://localhost/api/admin/workspaces/managed-1/capabilities", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(selected) }, env);
+    expect(update.status).toBe(200);
+    expect(await update.json()).toEqual(selected);
   });
 
   it("deletes a managed workspace Durable Object and D1 records", async () => {
@@ -145,6 +165,16 @@ describe("transactional notifications", () => {
     expect(sent?.to).toBe("oskarmansanqu@icloud.com");
     expect(sent?.html).toContain("Visitor &lt;script&gt;");
     expect(sent?.text).toContain("/admin?workspace=private-id");
+  });
+
+  it("sends an invited guest the private workspace URL and usage guidance", async () => {
+    let sent: Parameters<SendEmail["send"]>[0] | undefined;
+    const env: Pick<Env, "NOTIFICATION_EMAIL"> = { NOTIFICATION_EMAIL: { send: async (message) => { sent = message; return { messageId: "test" }; } } };
+    await sendWorkspaceInvitation(env, { email: "guest@example.com", name: "Guest", workspaceTitle: "Architecture review", purpose: "Review an edge design", workspaceId: "private-id", origin: "https://portfolio.example.com" });
+    expect(sent?.to).toBe("guest@example.com");
+    expect(sent?.text).toContain("https://portfolio.example.com/chat/private-id");
+    expect(sent?.text).toContain("Message Oskar directly");
+    expect(sent?.text).toContain("tools and skills Oskar has approved");
   });
 
   it("builds a booking alert and a downloadable reminder", async () => {

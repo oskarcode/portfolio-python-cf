@@ -10,9 +10,9 @@ import {
 import { anonymousChat } from "./agent/anonymous";
 import type { BlogPost, ChatMessage, Lead, SiteSection } from "./shared/types";
 import type { SaveSkillInput } from "./skills/types";
-import { createAdminWorkspace, deleteManagedWorkspaceRecord, listAdminWorkspaces, managedWorkspace, saveWorkspaceCapabilities, workspaceCapabilities } from "./data/workspaces";
+import { createAdminWorkspace, deleteManagedWorkspaceRecord, listAdminWorkspaces, managedWorkspace, saveWorkspaceCapabilities, saveWorkspaceGuest, workspaceCapabilities, workspaceGuest } from "./data/workspaces";
 import type { WorkspaceCapabilities } from "./shared/types";
-import { notifyOwnerOfBooking, notifyOwnerOfHandoff, sendBookingConfirmation } from "./notifications/email";
+import { notifyOwnerOfBooking, notifyOwnerOfHandoff, sendBookingConfirmation, sendWorkspaceInvitation } from "./notifications/email";
 import { bookingIcs } from "./calendar/ics";
 import { cancelSlot, createBooking, createSlot, getBooking, listCalendar, listOpenSlots } from "./data/calendar";
 
@@ -138,10 +138,11 @@ app.get("/api/calendar/bookings/:id/calendar.ics", async (c) => {
 app.post("/api/calendar/bookings", async (c) => {
   const input = await c.req.json<{ slotId?: string; workspaceId?: string }>();
   if (!input.slotId || !input.workspaceId) return c.json({ error: "A persistent workspace and consultation time are required" }, 400);
-  const lead = await workspaceRecord(c.env.DB, input.workspaceId);
-  if (!lead) return c.json({ error: "Workspace not found" }, 404);
+  const [lead, managed, guest] = await Promise.all([workspaceRecord(c.env.DB, input.workspaceId), managedWorkspace(c.env.DB, input.workspaceId), workspaceGuest(c.env.DB, input.workspaceId)]);
+  const profile = lead ? { name: lead.name, email: lead.email, topic: lead.intent } : managed && guest ? { name: guest.name, email: guest.email, topic: managed.purpose } : null;
+  if (!profile) return c.json({ error: "Workspace not found" }, 404);
   try {
-    const value = await createBooking(c.env.DB, { slotId: input.slotId, workspaceId: input.workspaceId, name: lead.name, email: lead.email, topic: lead.intent });
+    const value = await createBooking(c.env.DB, { slotId: input.slotId, workspaceId: input.workspaceId, ...profile });
     const calendarUrl = `/api/calendar/bookings/${value.id}/calendar.ics`;
     const confirmation = `**Your meeting is confirmed.**\n\n**When:** ${value.startsAt}\n\n**Topic:** ${value.topic}\n\nA confirmation email is being sent to **${value.email}**, and Oskar has been notified. [Join the Google Meet](${c.env.MEETING_URL}) or [add the meeting to your calendar with a 24-hour reminder](${calendarUrl}).`;
     await c.env.PORTFOLIO_SESSION.getByName(input.workspaceId).recordAgentMessage(confirmation).catch((error: unknown) => {
@@ -214,14 +215,19 @@ app.post("/api/handoff", async (c) => {
  */
 app.get("/api/workspaces/:id", async (c) => {
   const workspaceId = c.req.param("id");
-  const lead = await workspaceRecord(c.env.DB, workspaceId);
-  if (!lead) return c.json({ error: "Workspace not found" }, 404);
+  const [lead, managed, guest] = await Promise.all([workspaceRecord(c.env.DB, workspaceId), managedWorkspace(c.env.DB, workspaceId), workspaceGuest(c.env.DB, workspaceId)]);
+  if (!lead && (!managed || !guest)) return c.json({ error: "Workspace not found" }, 404);
+  const participants = lead ? await workspaceParticipants(c.env.DB, workspaceId) : [
+    { type: "visitor" as const, name: guest!.name, email: guest!.email },
+    { type: "owner" as const, name: "Oskar Ablimit", email: null },
+    { type: "agent" as const, name: "Portfolio Agent", email: null },
+  ];
   return c.json({
     workspaceId,
-    status: lead.workspaceStatus,
-    participants: await workspaceParticipants(c.env.DB, workspaceId),
+    status: lead?.workspaceStatus ?? managed!.status,
+    participants,
     messages: await c.env.PORTFOLIO_SESSION.getByName(workspaceId).history(),
-    bookingProfile: { name: lead.name, email: lead.email, topic: lead.intent },
+    bookingProfile: lead ? { name: lead.name, email: lead.email, topic: lead.intent } : { name: guest!.name, email: guest!.email, topic: managed!.purpose },
   });
 });
 
@@ -238,17 +244,18 @@ app.post("/api/workspaces/:id/messages", async (c) => {
   if (!input.message?.trim()) return c.json({ error: "message is required" }, 400);
   if (input.recipient !== "owner" && input.recipient !== "agent") return c.json({ error: "recipient must be owner or agent" }, 400);
   const workspaceId = c.req.param("id");
-  const lead = await workspaceRecord(c.env.DB, workspaceId);
-  if (!lead) return c.json({ error: "Workspace not found" }, 404);
+  const [lead, managed, guest] = await Promise.all([workspaceRecord(c.env.DB, workspaceId), managedWorkspace(c.env.DB, workspaceId), workspaceGuest(c.env.DB, workspaceId)]);
+  const visitorName = lead?.name ?? (managed && guest ? guest.name : null);
+  if (!visitorName) return c.json({ error: "Workspace not found" }, 404);
   const stub = c.env.PORTFOLIO_SESSION.getByName(workspaceId);
   if (input.recipient === "owner") {
-    await stub.sendHumanMessage(input.message, "visitor", lead.name);
+    await stub.sendHumanMessage(input.message, "visitor", visitorName);
     return c.json({ delivered: true, recipient: "owner" });
   }
   return c.json({
     delivered: true,
     recipient: "agent",
-    ...await stub.chat(input.message, input.requestId ?? crypto.randomUUID(), false, lead.name),
+    ...await stub.chat(input.message, input.requestId ?? crypto.randomUUID(), false, visitorName),
   });
 });
 
@@ -450,7 +457,40 @@ app.get("/api/admin/workspaces", async (c) => c.json({ workspaces: await listAdm
  * What this function does:
  * - It enforces the route boundary, calls the owning service, and maps failures through Hono.
  */
-app.post("/api/admin/workspaces", async (c) => c.json(await createAdminWorkspace(c.env.DB, await c.req.json<{ title: string; purpose: string }>()), 201));
+app.post("/api/admin/workspaces", async (c) => {
+  const input = await c.req.json<{ title: string; purpose: string; guestEmail?: string; guestName?: string }>();
+  const skills = await c.env.SKILL_HUB.getByName("global").listSkills();
+  const workspace = await createAdminWorkspace(c.env.DB, {
+    ...input,
+    capabilities: { portfolioRead: true, blogRead: true, consultation: true, webSearch: true, scheduling: true, skillSlugs: skills.filter((skill) => skill.enabled).map((skill) => skill.slug) },
+  });
+  let invitationEmail: "not-requested" | "sent" | "failed" = "not-requested";
+  if (workspace.visitorEmail && workspace.visitorName) {
+    try {
+      await sendWorkspaceInvitation(c.env, { email: workspace.visitorEmail, name: workspace.visitorName, workspaceTitle: workspace.title, purpose: workspace.purpose, workspaceId: workspace.id, origin: new URL(c.req.url).origin });
+      invitationEmail = "sent";
+    } catch (error) {
+      invitationEmail = "failed";
+      console.error(JSON.stringify({ event: "workspace_invitation_failed", workspaceId: workspace.id, error: error instanceof Error ? error.message : String(error) }));
+    }
+  }
+  return c.json({ ...workspace, invitationEmail }, 201);
+});
+app.post("/api/admin/workspaces/:id/invite", async (c) => {
+  const workspaceId = c.req.param("id");
+  const workspace = await managedWorkspace(c.env.DB, workspaceId);
+  if (!workspace) return c.json({ error: "Only admin-created workspaces support email invitations" }, 400);
+  const input = await c.req.json<{ email?: string; name?: string }>();
+  if (!input.email) return c.json({ error: "Guest email is required" }, 400);
+  const guest = await saveWorkspaceGuest(c.env.DB, workspaceId, input.email, input.name);
+  try {
+    await sendWorkspaceInvitation(c.env, { email: guest.email, name: guest.name, workspaceTitle: workspace.title, purpose: workspace.purpose, workspaceId, origin: new URL(c.req.url).origin });
+    return c.json({ ...guest, invitationEmail: "sent" });
+  } catch (error) {
+    console.error(JSON.stringify({ event: "workspace_invitation_failed", workspaceId, error: error instanceof Error ? error.message : String(error) }));
+    return c.json({ ...guest, invitationEmail: "failed" });
+  }
+});
 /**
  * Input:
  * - GET /api/admin/workspaces/:id/capabilities with path, query, or JSON values defined in the handler.
@@ -459,14 +499,7 @@ app.post("/api/admin/workspaces", async (c) => c.json(await createAdminWorkspace
  * What this function does:
  * - It enforces the route boundary, calls the owning service, and maps failures through Hono.
  */
-app.get("/api/admin/workspaces/:id/capabilities", async (c) => {
-  const workspaceId = c.req.param("id");
-  if (await managedWorkspace(c.env.DB, workspaceId)) {
-    const skills = await c.env.SKILL_HUB.getByName("global").listSkills("content");
-    return c.json({ webSearch: true, scheduling: true, skillSlugs: skills.filter((skill) => skill.enabled).map((skill) => skill.slug).sort() });
-  }
-  return c.json(await workspaceCapabilities(c.env.DB, workspaceId));
-});
+app.get("/api/admin/workspaces/:id/capabilities", async (c) => c.json(await workspaceCapabilities(c.env.DB, c.req.param("id"))));
 /**
  * Input:
  * - PUT /api/admin/workspaces/:id/capabilities with path, query, or JSON values defined in the handler.
@@ -477,9 +510,12 @@ app.get("/api/admin/workspaces/:id/capabilities", async (c) => {
  */
 app.put("/api/admin/workspaces/:id/capabilities", async (c) => {
   const workspaceId = c.req.param("id");
-  if (await managedWorkspace(c.env.DB, workspaceId)) return c.json({ error: "Managed workspaces automatically use the complete owner tool registry" }, 409);
   const input = await c.req.json<WorkspaceCapabilities>();
-  return c.json(await saveWorkspaceCapabilities(c.env.DB, workspaceId, { webSearch: input.webSearch === true, scheduling: input.scheduling === true, skillSlugs: Array.isArray(input.skillSlugs) ? input.skillSlugs.filter((slug): slug is string => typeof slug === "string") : [] }));
+  return c.json(await saveWorkspaceCapabilities(c.env.DB, workspaceId, {
+    portfolioRead: input.portfolioRead === true, blogRead: input.blogRead === true, consultation: input.consultation === true,
+    webSearch: input.webSearch === true, scheduling: input.scheduling === true,
+    skillSlugs: Array.isArray(input.skillSlugs) ? input.skillSlugs.filter((slug): slug is string => typeof slug === "string") : [],
+  }));
 });
 /**
  * Input:
@@ -506,7 +542,10 @@ app.patch("/api/admin/leads/:id", async (c) => {
 app.get("/api/admin/workspaces/:id", async (c) => {
   const workspaceId = c.req.param("id");
   const managed = await managedWorkspace(c.env.DB, workspaceId);
-  if (managed) return c.json({ workspaceId, status: managed.status, participants: [{ type: "owner", name: "Oskar Ablimit", email: adminEmail(c.req.raw) }, { type: "agent", name: "Portfolio Agent", email: null }], messages: await c.env.PORTFOLIO_SESSION.getByName(workspaceId).history(true) });
+  if (managed) {
+    const guest = await workspaceGuest(c.env.DB, workspaceId);
+    return c.json({ workspaceId, status: managed.status, participants: [...(guest ? [{ type: "visitor" as const, name: guest.name, email: guest.email }] : []), { type: "owner" as const, name: "Oskar Ablimit", email: adminEmail(c.req.raw) }, { type: "agent" as const, name: "Portfolio Agent", email: null }], messages: await c.env.PORTFOLIO_SESSION.getByName(workspaceId).history(true) });
+  }
   const lead = await workspaceRecord(c.env.DB, workspaceId);
   if (!lead) return c.json({ error: "Workspace not found" }, 404);
   return c.json({ workspaceId, status: lead.workspaceStatus, participants: await workspaceParticipants(c.env.DB, workspaceId), messages: await c.env.PORTFOLIO_SESSION.getByName(workspaceId).history() });
@@ -527,7 +566,11 @@ app.post("/api/admin/workspaces/:id/messages", async (c) => {
   const managed = await managedWorkspace(c.env.DB, workspaceId);
   const stub = c.env.PORTFOLIO_SESSION.getByName(workspaceId);
   if (managed) {
-    if (input.recipient !== "agent") return c.json({ error: "Managed workspaces message the agent" }, 400);
+    if (input.recipient === "visitor") {
+      if (!(await workspaceGuest(c.env.DB, workspaceId))) return c.json({ error: "This workspace has no invited guest" }, 400);
+      await stub.sendHumanMessage(input.message, "owner", "Oskar Ablimit");
+      return c.json({ delivered: true, recipient: "visitor" });
+    }
     return c.json({ delivered: true, recipient: "agent", ...await stub.chat(input.message, input.requestId ?? crypto.randomUUID(), true, "Oskar Ablimit", "owner") });
   }
   const lead = await workspaceRecord(c.env.DB, workspaceId);

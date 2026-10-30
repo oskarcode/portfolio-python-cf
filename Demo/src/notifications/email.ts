@@ -86,6 +86,26 @@ export async function notifyOwnerOfBooking(env: Pick<Env, "NOTIFICATION_EMAIL">,
  * What this function does:
  * - It sends Oskar the fixed owner alert for a consent-created workspace.
  */
+export async function sendWorkspaceInvitation(env: Pick<Env, "NOTIFICATION_EMAIL">, input: {
+  email: string;
+  name: string;
+  workspaceTitle: string;
+  purpose: string;
+  workspaceId: string;
+  origin: string;
+}): Promise<void> {
+  const workspaceUrl = `${input.origin}/chat/${encodeURIComponent(input.workspaceId)}`;
+  const name = input.name.replace(/[\r\n]+/g, " ").trim();
+  const title = input.workspaceTitle.replace(/[\r\n]+/g, " ").trim();
+  await env.NOTIFICATION_EMAIL.send({
+    from: { email: SENDER_ADDRESS, name: "Oskar Ablimit" },
+    to: input.email,
+    subject: `You’re invited to “${title}”`,
+    text: [`Hi ${name},`, "", `Oskar invited you to the private workspace “${title}”.`, "", `Purpose: ${input.purpose}`, "", "Inside the workspace you can:", "- Message Oskar directly", "- Ask the workspace agent for help", "- Use only the tools and skills Oskar has approved for this workspace", "- Return to the persistent conversation with the private link", "", `Open workspace: ${workspaceUrl}`, "", "This URL is a private invitation. Do not forward or publish it."].join("\n"),
+    html: `<div style="margin:0;padding:32px 16px;background:#f3f6f8;color:#172b3a;font-family:Arial,sans-serif"><div style="max-width:620px;margin:0 auto;border:1px solid #d8e0e5;border-radius:12px;background:#fff;overflow:hidden"><div style="padding:28px 32px;background:#0f1b24;color:#fff"><div style="margin-bottom:12px;color:#9af5dc;font-size:12px;font-weight:700;letter-spacing:.08em">PRIVATE WORKSPACE INVITATION</div><h1 style="margin:0;font-size:26px">${escapeHtml(title)}</h1></div><div style="padding:30px 32px"><p>Hi ${escapeHtml(name)},</p><p>Oskar invited you to a private, persistent workspace.</p><p><strong>Purpose:</strong> ${escapeHtml(input.purpose)}</p><ul><li>Message Oskar directly</li><li>Ask the workspace agent for help</li><li>Use the tools and skills Oskar approved</li><li>Return later with the same private link</li></ul><a href="${escapeHtml(workspaceUrl)}" style="display:block;margin:24px 0;padding:14px 18px;border-radius:7px;background:#1267e5;color:#fff;font-weight:700;text-align:center;text-decoration:none">Open private workspace</a><p style="color:#697b88;font-size:12px">Keep this invitation URL private. Anyone with the link can open the workspace.</p></div></div></div>`,
+  });
+}
+
 export async function notifyOwnerOfHandoff(env: Pick<Env, "NOTIFICATION_EMAIL">, input: {
   name: string;
   email: string;

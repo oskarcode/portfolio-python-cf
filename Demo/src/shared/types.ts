@@ -83,6 +83,9 @@ export interface AdminWorkspaceSummary {
 }
 
 export interface WorkspaceCapabilities {
+  portfolioRead: boolean;
+  blogRead: boolean;
+  consultation: boolean;
   webSearch: boolean;
   scheduling: boolean;
   skillSlugs: string[];

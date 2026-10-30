@@ -9,7 +9,8 @@ A Cloudflare-native professional portfolio that combines a technical website, lo
 - Converts a chat into a persistent visitor/Oskar/agent workspace only after explicit consent.
 - Creates a persistent workspace before consultation booking, then reuses its verified contact details for availability, confirmation email, Google Meet, and calendar reminders.
 - Gives the admin one chat interface for managed workspaces and visitor collaborations.
-- Gives every admin-created managed workspace the complete owner tool registry, web access, scheduling, and all enabled content skills automatically; visitor capabilities remain explicitly attached per workspace.
+- Lets Oskar create a workspace, invite a guest by email, and share a private capability URL with clear joining instructions.
+- Lists guest-safe tools and skills per workspace; only the Access-protected admin can change them, while invited guests can use approved capabilities without seeing management controls.
 - Stores reusable skill files in a durable Cloudflare Computer workspace and runs approved Worker Shell commands.
 - Lets the private content agent update portfolio sections and blog posts with revision history.
 
@@ -36,7 +37,7 @@ Anonymous chat sends bounded message history directly to Workers AI and keeps st
 | Workers AI + AI Gateway | GLM 5.2 inference, web search, and web-page conversion |
 | Pi Durable | Durable transcripts, agent tool execution, tasks, and recovery |
 | Durable Objects SQLite | One persistent `PortfolioSession` per workspace and one global `SkillHub` |
-| D1 | Portfolio content, posts, revisions, leads, participants, managed workspaces, and capability attachments |
+| D1 | Portfolio content, posts, revisions, leads, invited workspace members, workspace catalog records, and capability attachments |
 | Cloudflare Computer + Worker Loader | Git-versioned skill filesystem and isolated Worker Shell execution |
 | Durable Object alarms | One-time scheduled workspace instructions |
 | Cloudflare Access | Production authentication boundary for `/admin*` and `/api/admin/*` |
@@ -159,7 +160,7 @@ npm run deploy
 | Symptom | Check |
 | --- | --- |
 | Admin redirects or returns 401 | Cloudflare Access application and policy for both admin path patterns |
-| Visitor agent answers without a tool | Workspace **Tools & skills** attachment and `workspace_capabilities` rows; managed workspaces receive the owner registry automatically |
+| Workspace agent answers without a guest-safe tool | Check the workspace’s **Tools & skills** selections and `workspace_capabilities` rows |
 | Skill is unavailable | Skill enabled state, audience, and workspace attachment |
 | Computer command fails | `SKILL_LOADER`, `experimental` compatibility flag, command availability, and stderr |
 | Schedule never runs | Durable Object alarm state and `PortfolioSession.alarm()` logs |
