@@ -147,7 +147,6 @@ export class PortfolioSession extends DurableObject<Env> {
     const publicTools = createPortfolioTools(this.env);
     const ownerTools = createOwnerTools(this.env.DB);
     const skillHub = this.env.SKILL_HUB.getByName("global");
-    await skillHub.ensureBuiltinSkills();
     const [capabilities, managed, visitor] = await Promise.all([
       workspaceCapabilities(this.env.DB, this.#workspaceId),
       managedWorkspace(this.env.DB, this.#workspaceId),

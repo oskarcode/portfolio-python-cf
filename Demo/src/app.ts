@@ -185,7 +185,6 @@ app.post("/api/handoff", async (c) => {
     intent, summary: input.summary,
   });
   const skillHub = c.env.SKILL_HUB.getByName("global");
-  await skillHub.ensureBuiltinSkills();
   const defaultSkills = (await skillHub.listSkills()).filter((skill) => skill.enabled).map((skill) => skill.slug);
   await initializeWorkspaceCapabilities(c.env.DB, workspaceId, defaultSkills);
   const imported = await stub.initializeWorkspace(
@@ -316,7 +315,6 @@ app.delete("/api/admin/calendar/slots/:id", async (c) => {
  */
 app.get("/api/admin/skills", async (c) => {
   const skillHub = c.env.SKILL_HUB.getByName("global");
-  await skillHub.ensureBuiltinSkills();
   return c.json({ skills: await skillHub.listSkills() });
 });
 /**
@@ -484,7 +482,6 @@ app.get("/api/admin/workspaces", async (c) => c.json({ workspaces: await listAdm
 app.post("/api/admin/workspaces", async (c) => {
   const input = await c.req.json<{ title: string; purpose: string; guestEmail?: string; guestName?: string }>();
   const skillHub = c.env.SKILL_HUB.getByName("global");
-  await skillHub.ensureBuiltinSkills();
   const skills = await skillHub.listSkills();
   const workspace = await createAdminWorkspace(c.env.DB, {
     ...input,

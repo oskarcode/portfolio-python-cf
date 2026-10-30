@@ -76,7 +76,7 @@ const frontmatter = (name: string, description: string, markdown: string) => {
 
 /** Deployment-global durable Cloudflare Computer for approved portfolio skills. */
 export class SkillHub extends BaseSkillHub {
-  async ensureBuiltinSkills(): Promise<void> {
+  async #ensureBuiltinSkills(): Promise<void> {
     if (!(await this.getSkill(CONSULTATION_ONBOARDING_SLUG))) await this.saveSkill(CONSULTATION_ONBOARDING_SKILL);
   }
 
@@ -114,6 +114,7 @@ export class SkillHub extends BaseSkillHub {
    * - It reads and returns an ordered collection.
    */
   async listSkills(audience?: "visitor" | "content"): Promise<SkillSummary[]> {
+    await this.#ensureBuiltinSkills();
     using workspace = await this.#workspace();
     const skills: SkillSummary[] = [];
     for (const entry of await workspace.fs.readdir(SKILLS_DIRECTORY)) {
