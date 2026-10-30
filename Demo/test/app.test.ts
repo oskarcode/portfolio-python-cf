@@ -110,6 +110,20 @@ describe("admin workspace catalog", () => {
     expect(await update.json()).toEqual(selected);
   });
 
+  it("gives Oskar owner tools when asking the agent from any admin workspace", async () => {
+    let ownerMode = false;
+    const db = {
+      prepare: (sql: string) => ({ bind: () => ({ first: async () => sql.includes("FROM leads") ? { id: "lead-1", workspace_id: "visitor-1", name: "Guest", email: "guest@example.com", company: null, intent: "Review", status: "new", workspace_status: "active", summary: null, assessment_json: null, created_at: "2030-01-01", updated_at: "2030-01-01" } : null }) }),
+    } as unknown as D1Database;
+    const env = {
+      DB: db,
+      PORTFOLIO_SESSION: { getByName: () => ({ chat: async (_message: string, _requestId: string, owner: boolean) => { ownerMode = owner; return { answer: "ok" }; } }) },
+    } as unknown as Env;
+    const response = await app.request("http://localhost/api/admin/workspaces/visitor-1/messages", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message: "Update content", recipient: "agent" }) }, env);
+    expect(response.status).toBe(200);
+    expect(ownerMode).toBe(true);
+  });
+
   it("deletes a managed workspace Durable Object and D1 records", async () => {
     let durableDeleted = false;
     let batchSql: string[] = [];

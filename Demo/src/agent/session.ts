@@ -173,7 +173,7 @@ export class PortfolioSession extends DurableObject<Env> {
     const ownerPublicTools = selectedPublicTools.filter((tool) => tool.name !== "list_consultation_times" && tool.name !== "book_consultation");
     const tools = owner ? [...ownerPublicTools, ...ownerTools, ...skillTools, ...webTools, ...scheduleTools] : [...selectedPublicTools, ...skillTools, ...webTools, ...scheduleTools];
     const skillCatalog = availableSkills.length ? `Skills attached to this workspace:\n${availableSkills.map((skill) => `- ${skill.slug}: ${skill.description}`).join("\n")}\nActivate a matching skill before using it.` : "No reusable skills are available to this workspace.";
-    const visitor = owner ? null : await workspaceRecord(this.env.DB, this.#workspaceId);
+    const visitor = managed ? null : await workspaceRecord(this.env.DB, this.#workspaceId);
     const workspaceContext = managed
       ? `Workspace purpose: ${managed.purpose}`
       : visitor

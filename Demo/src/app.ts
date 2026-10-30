@@ -582,7 +582,7 @@ app.post("/api/admin/workspaces/:id/messages", async (c) => {
   return c.json({
     delivered: true,
     recipient: "agent",
-    ...await stub.chat(input.message, input.requestId ?? crypto.randomUUID(), false, "Oskar Ablimit", "owner"),
+    ...await stub.chat(input.message, input.requestId ?? crypto.randomUUID(), true, "Oskar Ablimit", "owner"),
   });
 });
 /**
