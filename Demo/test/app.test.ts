@@ -220,6 +220,8 @@ describe("agent controls", () => {
     expect(VISITOR_PROMPT).toContain("cannot edit content or skills");
     expect(VISITOR_PROMPT).toContain("Never execute arbitrary commands");
     expect(VISITOR_PROMPT).toContain("external Google Calendar appointment schedule is retired");
+    expect(VISITOR_PROMPT).toContain("Oskar is already a participant");
+    expect(VISITOR_PROMPT).toContain("Never suggest “Add Oskar”");
     expect(OWNER_PROMPT).toContain("private portfolio content agent");
     expect(OWNER_PROMPT).toContain("Never invent credentials");
     expect(OWNER_PROMPT).toContain("add, reschedule, or cancel open availability");
