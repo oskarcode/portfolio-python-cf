@@ -147,6 +147,7 @@ export class PortfolioSession extends DurableObject<Env> {
     const publicTools = createPortfolioTools(this.env);
     const ownerTools = createOwnerTools(this.env.DB);
     const skillHub = this.env.SKILL_HUB.getByName("global");
+    await skillHub.ensureBuiltinSkills();
     const [capabilities, managed, visitor] = await Promise.all([
       workspaceCapabilities(this.env.DB, this.#workspaceId),
       managedWorkspace(this.env.DB, this.#workspaceId),
@@ -215,6 +216,8 @@ export class PortfolioSession extends DurableObject<Env> {
     for (const entry of page.items) {
       if (WorkspaceMessageEntry.is(entry) || WorkspaceAgentRequestEntry.is(entry)) {
         const data = entry.data;
+        // Internal onboarding prompts should produce an assistant greeting without appearing as a fake guest message.
+        if (WorkspaceAgentRequestEntry.is(entry) && data.sender === "agent") continue;
         messages.push({ id: entry.id, sender: data.sender, senderName: data.senderName, audience: data.audience, content: data.text, timestamp: data.timestamp });
       } else if (UserEntry.is(entry)) {
         const content = messageText(entry.model?.[0]?.content);
@@ -312,6 +315,24 @@ export class PortfolioSession extends DurableObject<Env> {
     await submission.wait(BACKGROUND_CONTEXT);
   }
 
+  /** Trigger the attached consultation-onboarding skill once without rendering a fake guest request. */
+  async onboardInvitedGuest(visitorName: string, intent?: string): Promise<{ answer: string }> {
+    const conversation = await this.#conversation(false);
+    const submission = await conversation.submit({
+      type: "input",
+      content: `The invited guest ${JSON.stringify(visitorName)} has opened this persistent workspace for the first time.${intent ? ` Their stated goal is ${JSON.stringify(intent)}.` : ""} Activate the consultation-onboarding skill and send its compact bilingual first-join greeting now. Oskar is already a participant.`,
+      entry: {
+        kind: WorkspaceAgentRequestEntry.kind,
+        data: { text: "First-join onboarding", sender: "agent", senderName: "Workspace system", audience: "agent", timestamp: Date.now() },
+      },
+      requestId: `onboarding:${this.#workspaceId}`,
+    }, BACKGROUND_CONTEXT);
+    const settled = await submission.wait(BACKGROUND_CONTEXT);
+    if (settled.status !== "done" || settled.type !== "input") throw new Error(`Onboarding did not complete: ${settled.status}`);
+    const entry = await conversation.commit((tx) => tx.entry(AssistantEntry, settled.answer), BACKGROUND_CONTEXT);
+    return { answer: messageText(entry?.model?.[0]?.content) };
+  }
+
   /**
    * Input:
    * - The typed parameters shown in the function signature.
@@ -338,7 +359,7 @@ export class PortfolioSession extends DurableObject<Env> {
       }, BACKGROUND_CONTEXT);
       await submission.wait(BACKGROUND_CONTEXT);
     }
-    return this.chat(`I have added Oskar to this workspace. My goal is: ${intent}. Acknowledge the handoff briefly and explain that I can message Oskar directly or ask you for help.`, crypto.randomUUID(), false, visitorName);
+    return this.onboardInvitedGuest(visitorName, intent);
   }
 
   /**

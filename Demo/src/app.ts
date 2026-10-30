@@ -10,7 +10,7 @@ import {
 import { anonymousChat } from "./agent/anonymous";
 import type { BlogPost, ChatMessage, Lead, SiteSection } from "./shared/types";
 import type { SaveSkillInput } from "./skills/types";
-import { createAdminWorkspace, deleteManagedWorkspaceRecord, listAdminWorkspaces, managedWorkspace, saveWorkspaceCapabilities, saveWorkspaceGuest, workspaceCapabilities, workspaceGuest } from "./data/workspaces";
+import { claimWorkspaceOnboarding, createAdminWorkspace, deleteManagedWorkspaceRecord, initializeWorkspaceCapabilities, listAdminWorkspaces, managedWorkspace, markWorkspaceInvitation, releaseWorkspaceOnboarding, saveWorkspaceCapabilities, saveWorkspaceGuest, touchWorkspacePresence, workspaceCapabilities, workspaceGuest, workspacePresence } from "./data/workspaces";
 import type { WorkspaceCapabilities } from "./shared/types";
 import { notifyOwnerOfBooking, notifyOwnerOfHandoff, sendBookingConfirmation, sendWorkspaceInvitation } from "./notifications/email";
 import { bookingIcs } from "./calendar/ics";
@@ -22,6 +22,7 @@ app.use("/api/workspaces/*", async (c, next) => { await next(); c.header("Cache-
 
 const isLocal = (request: Request) => ["localhost", "127.0.0.1"].includes(new URL(request.url).hostname);
 const adminEmail = (request: Request) => request.headers.get("Cf-Access-Authenticated-User-Email");
+const isRecentlyOnline = (value: string | null) => value !== null && Date.now() - Date.parse(`${value.replace(" ", "T")}Z`) < 20_000;
 const requireAdmin = async (c: { req: { raw: Request }; json: (body: unknown, status?: 401) => Response }, next: () => Promise<void>) => {
   if (!isLocal(c.req.raw) && !adminEmail(c.req.raw)) return c.json({ error: "Cloudflare Access authentication required" }, 401);
   await next();
@@ -178,18 +179,23 @@ app.post("/api/handoff", async (c) => {
   }
   const workspaceId = crypto.randomUUID();
   const stub = c.env.PORTFOLIO_SESSION.getByName(workspaceId);
-  const imported = await stub.initializeWorkspace(
-    (input.transcript ?? []).filter((message): message is ChatMessage =>
-      (message.role === "user" || message.role === "assistant") && typeof message.content === "string",
-    ),
-    input.name.trim(),
-    input.intent ?? "Talk with Oskar",
-  );
   const intent = input.intent ?? "Talk with Oskar";
   const lead = await createLead(c.env.DB, {
     workspaceId, name: input.name, email: input.email, company: input.company,
     intent, summary: input.summary,
   });
+  const skillHub = c.env.SKILL_HUB.getByName("global");
+  await skillHub.ensureBuiltinSkills();
+  const defaultSkills = (await skillHub.listSkills()).filter((skill) => skill.enabled).map((skill) => skill.slug);
+  await initializeWorkspaceCapabilities(c.env.DB, workspaceId, defaultSkills);
+  const imported = await stub.initializeWorkspace(
+    (input.transcript ?? []).filter((message): message is ChatMessage =>
+      (message.role === "user" || message.role === "assistant") && typeof message.content === "string",
+    ),
+    input.name.trim(),
+    intent,
+  );
+  await claimWorkspaceOnboarding(c.env.DB, workspaceId);
   c.executionCtx.waitUntil(notifyOwnerOfHandoff(c.env, {
     name: input.name,
     email: input.email,
@@ -215,18 +221,32 @@ app.post("/api/handoff", async (c) => {
  */
 app.get("/api/workspaces/:id", async (c) => {
   const workspaceId = c.req.param("id");
-  const [lead, managed, guest] = await Promise.all([workspaceRecord(c.env.DB, workspaceId), managedWorkspace(c.env.DB, workspaceId), workspaceGuest(c.env.DB, workspaceId)]);
-  if (!lead && (!managed || !guest)) return c.json({ error: "Workspace not found" }, 404);
-  const participants = lead ? await workspaceParticipants(c.env.DB, workspaceId) : [
-    { type: "visitor" as const, name: guest!.name, email: guest!.email },
-    { type: "owner" as const, name: "Oskar Ablimit", email: null },
-    { type: "agent" as const, name: "Portfolio Agent", email: null },
+  const [lead, managed, initialGuest] = await Promise.all([workspaceRecord(c.env.DB, workspaceId), managedWorkspace(c.env.DB, workspaceId), workspaceGuest(c.env.DB, workspaceId)]);
+  if (!lead && (!managed || !initialGuest)) return c.json({ error: "Workspace not found" }, 404);
+  await touchWorkspacePresence(c.env.DB, workspaceId, "visitor");
+  const stub = c.env.PORTFOLIO_SESSION.getByName(workspaceId);
+  if (await claimWorkspaceOnboarding(c.env.DB, workspaceId)) {
+    c.executionCtx.waitUntil(stub.onboardInvitedGuest(lead?.name ?? initialGuest!.name, lead?.intent ?? managed?.purpose).catch(async (error: unknown) => {
+      await releaseWorkspaceOnboarding(c.env.DB, workspaceId);
+      console.error(JSON.stringify({ event: "workspace_onboarding_failed", workspaceId, error: error instanceof Error ? error.message : String(error) }));
+    }).then(() => undefined));
+  }
+  const [presence, guest, storedParticipants, messages] = await Promise.all([
+    workspacePresence(c.env.DB, workspaceId),
+    managed ? workspaceGuest(c.env.DB, workspaceId) : Promise.resolve(null),
+    lead ? workspaceParticipants(c.env.DB, workspaceId) : Promise.resolve([]),
+    stub.history(),
+  ]);
+  const participants = lead ? storedParticipants.map((participant) => ({ ...participant, online: participant.type === "visitor" ? isRecentlyOnline(presence.visitor) : participant.type === "owner" ? isRecentlyOnline(presence.owner) : true, lastSeenAt: participant.type === "visitor" ? presence.visitor : participant.type === "owner" ? presence.owner : null, status: participant.type === "visitor" ? "joined" as const : participant.type === "owner" ? "joined" as const : "available" as const })) : [
+    { type: "visitor" as const, name: guest!.name, email: guest!.email, online: isRecentlyOnline(presence.visitor), lastSeenAt: presence.visitor, status: guest!.joinedAt ? "joined" as const : guest!.invitationStatus === "failed" ? "email-failed" as const : "invited" as const },
+    { type: "owner" as const, name: "Oskar Ablimit", email: null, online: isRecentlyOnline(presence.owner), lastSeenAt: presence.owner, status: "joined" as const },
+    { type: "agent" as const, name: "Portfolio Agent", email: null, online: true, lastSeenAt: null, status: "available" as const },
   ];
   return c.json({
     workspaceId,
     status: lead?.workspaceStatus ?? managed!.status,
     participants,
-    messages: await c.env.PORTFOLIO_SESSION.getByName(workspaceId).history(),
+    messages,
     bookingProfile: lead ? { name: lead.name, email: lead.email, topic: lead.intent } : { name: guest!.name, email: guest!.email, topic: managed!.purpose },
   });
 });
@@ -294,7 +314,11 @@ app.delete("/api/admin/calendar/slots/:id", async (c) => {
  * What this function does:
  * - It enforces the route boundary, calls the owning service, and maps failures through Hono.
  */
-app.get("/api/admin/skills", async (c) => c.json({ skills: await c.env.SKILL_HUB.getByName("global").listSkills() }));
+app.get("/api/admin/skills", async (c) => {
+  const skillHub = c.env.SKILL_HUB.getByName("global");
+  await skillHub.ensureBuiltinSkills();
+  return c.json({ skills: await skillHub.listSkills() });
+});
 /**
  * Input:
  * - GET /api/admin/skills/:slug with path, query, or JSON values defined in the handler.
@@ -459,7 +483,9 @@ app.get("/api/admin/workspaces", async (c) => c.json({ workspaces: await listAdm
  */
 app.post("/api/admin/workspaces", async (c) => {
   const input = await c.req.json<{ title: string; purpose: string; guestEmail?: string; guestName?: string }>();
-  const skills = await c.env.SKILL_HUB.getByName("global").listSkills();
+  const skillHub = c.env.SKILL_HUB.getByName("global");
+  await skillHub.ensureBuiltinSkills();
+  const skills = await skillHub.listSkills();
   const workspace = await createAdminWorkspace(c.env.DB, {
     ...input,
     capabilities: { portfolioRead: true, blogRead: true, consultation: true, webSearch: true, scheduling: true, skillSlugs: skills.filter((skill) => skill.enabled).map((skill) => skill.slug) },
@@ -468,9 +494,11 @@ app.post("/api/admin/workspaces", async (c) => {
   if (workspace.visitorEmail && workspace.visitorName) {
     try {
       await sendWorkspaceInvitation(c.env, { email: workspace.visitorEmail, name: workspace.visitorName, workspaceTitle: workspace.title, purpose: workspace.purpose, workspaceId: workspace.id, origin: new URL(c.req.url).origin });
+      await markWorkspaceInvitation(c.env.DB, workspace.id, "sent");
       invitationEmail = "sent";
     } catch (error) {
       invitationEmail = "failed";
+      await markWorkspaceInvitation(c.env.DB, workspace.id, "failed");
       console.error(JSON.stringify({ event: "workspace_invitation_failed", workspaceId: workspace.id, error: error instanceof Error ? error.message : String(error) }));
     }
   }
@@ -485,8 +513,10 @@ app.post("/api/admin/workspaces/:id/invite", async (c) => {
   const guest = await saveWorkspaceGuest(c.env.DB, workspaceId, input.email, input.name);
   try {
     await sendWorkspaceInvitation(c.env, { email: guest.email, name: guest.name, workspaceTitle: workspace.title, purpose: workspace.purpose, workspaceId, origin: new URL(c.req.url).origin });
+    await markWorkspaceInvitation(c.env.DB, workspaceId, "sent");
     return c.json({ ...guest, invitationEmail: "sent" });
   } catch (error) {
+    await markWorkspaceInvitation(c.env.DB, workspaceId, "failed");
     console.error(JSON.stringify({ event: "workspace_invitation_failed", workspaceId, error: error instanceof Error ? error.message : String(error) }));
     return c.json({ ...guest, invitationEmail: "failed" });
   }
@@ -541,14 +571,21 @@ app.patch("/api/admin/leads/:id", async (c) => {
  */
 app.get("/api/admin/workspaces/:id", async (c) => {
   const workspaceId = c.req.param("id");
-  const managed = await managedWorkspace(c.env.DB, workspaceId);
-  if (managed) {
-    const guest = await workspaceGuest(c.env.DB, workspaceId);
-    return c.json({ workspaceId, status: managed.status, participants: [...(guest ? [{ type: "visitor" as const, name: guest.name, email: guest.email }] : []), { type: "owner" as const, name: "Oskar Ablimit", email: adminEmail(c.req.raw) }, { type: "agent" as const, name: "Portfolio Agent", email: null }], messages: await c.env.PORTFOLIO_SESSION.getByName(workspaceId).history(true) });
-  }
-  const lead = await workspaceRecord(c.env.DB, workspaceId);
-  if (!lead) return c.json({ error: "Workspace not found" }, 404);
-  return c.json({ workspaceId, status: lead.workspaceStatus, participants: await workspaceParticipants(c.env.DB, workspaceId), messages: await c.env.PORTFOLIO_SESSION.getByName(workspaceId).history() });
+  const [managed, lead] = await Promise.all([managedWorkspace(c.env.DB, workspaceId), workspaceRecord(c.env.DB, workspaceId)]);
+  if (!managed && !lead) return c.json({ error: "Workspace not found" }, 404);
+  await touchWorkspacePresence(c.env.DB, workspaceId, "owner");
+  const [presence, guest, storedParticipants, messages] = await Promise.all([
+    workspacePresence(c.env.DB, workspaceId),
+    managed ? workspaceGuest(c.env.DB, workspaceId) : Promise.resolve(null),
+    lead ? workspaceParticipants(c.env.DB, workspaceId) : Promise.resolve([]),
+    c.env.PORTFOLIO_SESSION.getByName(workspaceId).history(Boolean(managed)),
+  ]);
+  const participants = managed ? [
+    ...(guest ? [{ type: "visitor" as const, name: guest.name, email: guest.email, online: isRecentlyOnline(presence.visitor), lastSeenAt: presence.visitor, status: guest.joinedAt ? "joined" as const : guest.invitationStatus === "failed" ? "email-failed" as const : "invited" as const }] : []),
+    { type: "owner" as const, name: "Oskar Ablimit", email: adminEmail(c.req.raw), online: true, lastSeenAt: presence.owner, status: "joined" as const },
+    { type: "agent" as const, name: "Portfolio Agent", email: null, online: true, lastSeenAt: null, status: "available" as const },
+  ] : storedParticipants.map((participant) => ({ ...participant, online: participant.type === "visitor" ? isRecentlyOnline(presence.visitor) : participant.type === "owner" ? true : true, lastSeenAt: participant.type === "visitor" ? presence.visitor : participant.type === "owner" ? presence.owner : null, status: participant.type === "visitor" ? "joined" as const : participant.type === "owner" ? "joined" as const : "available" as const }));
+  return c.json({ workspaceId, status: managed?.status ?? lead!.workspaceStatus, participants, messages });
 });
 /**
  * Input:

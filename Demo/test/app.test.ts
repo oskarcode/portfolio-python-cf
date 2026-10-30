@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import app from "../src/app";
 import { OWNER_PROMPT, VISITOR_PROMPT } from "../src/agent/prompt";
 import { createSkillTools, type SkillHubCaller } from "../src/skills/tools";
+import { CONSULTATION_ONBOARDING_SKILL, CONSULTATION_ONBOARDING_SLUG } from "../src/skills/builtins";
 import { notifyOwnerOfBooking, notifyOwnerOfHandoff, sendBookingConfirmation, sendWorkspaceInvitation } from "../src/notifications/email";
 import { bookingIcs } from "../src/calendar/ics";
 import { createOwnerTools } from "../src/agent/tools";
@@ -75,12 +76,12 @@ describe("admin workspace catalog", () => {
     let sent: Parameters<SendEmail["send"]>[0] | undefined;
     let batchSql: string[] = [];
     const db = {
-      prepare: (sql: string) => ({ bind: () => ({ sql }) }),
+      prepare: (sql: string) => ({ bind: () => ({ sql, run: async () => ({ meta: { changes: 1 } }) }) }),
       batch: async (statements: Array<{ sql: string }>) => { batchSql = statements.map((statement) => statement.sql); return []; },
     } as unknown as D1Database;
     const env = {
       DB: db,
-      SKILL_HUB: { getByName: () => ({ listSkills: async () => [] }) },
+      SKILL_HUB: { getByName: () => ({ ensureBuiltinSkills: async () => undefined, listSkills: async () => [] }) },
       NOTIFICATION_EMAIL: { send: async (message: Parameters<SendEmail["send"]>[0]) => { sent = message; return { messageId: "test" }; } },
     } as unknown as Env;
     const response = await app.request("http://localhost/api/admin/workspaces", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title: "Architecture review", purpose: "Review an edge design", guestEmail: "guest@example.com", guestName: "Guest" }) }, env);
@@ -231,6 +232,15 @@ describe("agent controls", () => {
     expect(OWNER_PROMPT).toContain("require Oskar's explicit confirmation");
     expect(OWNER_PROMPT).toContain("always use admin_list_calendar");
     expect(OWNER_PROMPT).toContain("external Google Calendar appointment schedule is retired");
+  });
+
+  it("defines the default persistent-workspace consultation onboarding skill", () => {
+    expect(CONSULTATION_ONBOARDING_SLUG).toBe("consultation-onboarding");
+    expect(CONSULTATION_ONBOARDING_SKILL.audience).toBe("both");
+    expect(CONSULTATION_ONBOARDING_SKILL.markdown).toContain("USD 100 per hour");
+    expect(CONSULTATION_ONBOARDING_SKILL.markdown).toContain("Simplified Chinese");
+    expect(CONSULTATION_ONBOARDING_SKILL.markdown).toContain("Message Oskar");
+    expect(CONSULTATION_ONBOARDING_SKILL.markdown).toContain("private bearer access");
   });
 
   it("can list delayed workspace instructions separately from calendar availability", () => {

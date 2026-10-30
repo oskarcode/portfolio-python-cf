@@ -9,6 +9,7 @@ import htmlToMarkdownModules from "@cloudflare/computer/shell/html-to-markdown";
 import javascriptModules from "@cloudflare/computer/shell/js-exec";
 import jqModules from "@cloudflare/computer/shell/jq";
 import type { ComputerFileEntry, SaveSkillInput, SkillAudience, SkillRecord, SkillSummary } from "./types";
+import { CONSULTATION_ONBOARDING_SKILL, CONSULTATION_ONBOARDING_SLUG } from "./builtins";
 
 const SKILLS_DIRECTORY = "/workspace/skills";
 const MAX_SKILL_BYTES = 64 * 1024;
@@ -75,6 +76,10 @@ const frontmatter = (name: string, description: string, markdown: string) => {
 
 /** Deployment-global durable Cloudflare Computer for approved portfolio skills. */
 export class SkillHub extends BaseSkillHub {
+  async ensureBuiltinSkills(): Promise<void> {
+    if (!(await this.getSkill(CONSULTATION_ONBOARDING_SLUG))) await this.saveSkill(CONSULTATION_ONBOARDING_SKILL);
+  }
+
   async #workspace() {
     const workspace = await getWorkspace(this);
     await workspace.fs.mkdir(SKILLS_DIRECTORY, { recursive: true });

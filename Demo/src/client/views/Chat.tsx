@@ -3,7 +3,7 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 // Application modules supply the typed HTTP client, shared payload contracts, and safe response renderer.
 import { api } from "../api";
-import type { CalendarSlot, ChatMessage, WorkspaceMessage } from "../../shared/types";
+import type { CalendarSlot, ChatMessage, WorkspaceMessage, WorkspaceParticipant } from "../../shared/types";
 import { ChatResponse, responseActions } from "../components/ChatResponse";
 
 type DisplayMessage = ChatMessage & {
@@ -58,6 +58,7 @@ export function Chat() {
   const [handoffPurpose, setHandoffPurpose] = useState<HandoffPurpose>("collaboration");
   const [bookingFlow, setBookingFlow] = useState<BookingFlow | null>(null);
   const [bookingProfile, setBookingProfile] = useState<{ name: string; email: string; topic: string } | null>(null);
+  const [participants, setParticipants] = useState<WorkspaceParticipant[]>([]);
   const [contact, setContact] = useState({ name: "", email: "", company: "", intent: "" });
   const end = useRef<HTMLDivElement>(null);
   // This ref changes synchronously so workspace polling cannot erase an in-progress booking prompt.
@@ -72,6 +73,7 @@ export function Chat() {
       if (active) {
         if (!bookingFlowRef.current) setMessages(data.messages.length ? data.messages.map(displayWorkspace) : [{ role: "assistant", sender: "agent", senderName: "Portfolio Agent", content: "Welcome to your private workspace with Oskar. You can message Oskar directly or ask the agent for help using the tools and skills Oskar has approved here." }]);
         setBookingProfile(data.bookingProfile ?? null);
+        setParticipants(data.participants);
       }
     }).catch(() => undefined);
     void refresh();
@@ -237,7 +239,7 @@ export function Chat() {
   };
 
   return <div className="chat-shell">
-    <header className="chat-header"><a className="brand" href="/"><span className="brand-mark">OA</span><span>Oskar Ablimit</span></a><div className="chat-status"><span className="status-dot"/>{workspaceId ? "Oskar + Agent · Persistent" : "Anonymous · Clears on refresh"}</div><a href="/" className="close-chat">Website view ×</a></header>
+    <header className="chat-header"><a className="brand" href="/"><span className="brand-mark">OA</span><span>Oskar Ablimit</span></a><div className="chat-status"><span className="status-dot"/>{workspaceId ? `Persistent · Oskar ${participants.find((participant) => participant.type === "owner")?.online ? "online" : "offline"} · Agent available` : "Anonymous · Clears on refresh"}</div><a href="/" className="close-chat">Website view ×</a></header>
     <div className="chat-main"><aside className="chat-intro"><span className="eyebrow">CONVERSATIONAL PORTFOLIO</span><h1>What would you like to explore?</h1><p>The agent can use Oskar’s published portfolio and article catalog. It has no access to private information or workspace tools in anonymous mode.</p><div className="privacy-note"><strong>{workspaceId ? "Shared workspace" : "Private by default"}</strong><p>{workspaceId ? "Use the two recipient buttons to message Oskar directly or ask the agent. Anyone with this private link can return to the workspace." : "This conversation stays in browser memory and disappears when you refresh. Nothing is shared with Oskar unless you explicitly add him and consent."}</p></div></aside>
       <section className="conversation" aria-live="polite"><div className="messages">{messages.map((message, index) => {
           const isAgent = message.role === "assistant" && (message.sender === "agent" || !message.sender);

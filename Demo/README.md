@@ -11,6 +11,8 @@ A Cloudflare-native professional portfolio that combines a technical website, lo
 - Gives the admin one chat interface for managed workspaces and visitor collaborations.
 - Lets Oskar create a workspace, invite a guest by email, and share a private capability URL with clear joining instructions.
 - Lists guest-safe tools and skills per workspace; only the Access-protected admin can change them, while invited guests can use approved capabilities without seeing management controls.
+- Attaches a built-in tech-sales consultation onboarding skill to every persistent workspace and triggers a concise bilingual greeting when a guest first joins.
+- Tracks invitation delivery, first join, and approximate owner/guest online presence through workspace heartbeats.
 - Stores reusable skill files in a durable Cloudflare Computer workspace and runs approved Worker Shell commands.
 - Lets the private content agent update portfolio sections and blog posts with revision history.
 

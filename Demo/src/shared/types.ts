@@ -61,6 +61,9 @@ export interface WorkspaceParticipant {
   type: "visitor" | "owner" | "agent";
   name: string;
   email: string | null;
+  online?: boolean;
+  lastSeenAt?: string | null;
+  status?: "invited" | "email-failed" | "joined" | "available";
 }
 
 export interface WorkspaceSnapshot {
@@ -80,6 +83,9 @@ export interface AdminWorkspaceSummary {
   updatedAt: string;
   visitorName?: string;
   visitorEmail?: string;
+  guestStatus?: "invited" | "email-failed" | "joined";
+  guestOnline?: boolean;
+  ownerOnline?: boolean;
 }
 
 export interface WorkspaceCapabilities {
