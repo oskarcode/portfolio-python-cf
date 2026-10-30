@@ -4,11 +4,11 @@ import app from "../src/app";
 import { OWNER_PROMPT, VISITOR_PROMPT } from "../src/agent/prompt";
 import { createSkillTools, type SkillHubCaller } from "../src/skills/tools";
 import { CONSULTATION_ONBOARDING_SKILL, CONSULTATION_ONBOARDING_SLUG } from "../src/skills/builtins";
-import { notifyOwnerOfBooking, notifyOwnerOfHandoff, sendBookingConfirmation, sendWorkspaceInvitation } from "../src/notifications/email";
+import { notifyOwnerOfBooking, notifyOwnerOfHandoff, sendBookingCancellation, sendBookingConfirmation, sendWorkspaceInvitation } from "../src/notifications/email";
 import { bookingIcs } from "../src/calendar/ics";
 import { createOwnerTools } from "../src/agent/tools";
 import { createScheduleTools } from "../src/agent/scheduling";
-import { createSlot } from "../src/data/calendar";
+import { cancelSlot, createSlot } from "../src/data/calendar";
 import { deleteWorkspaceRecord } from "../src/data/leads";
 import { listAdminWorkspaces } from "../src/data/workspaces";
 
@@ -212,6 +212,11 @@ describe("transactional notifications", () => {
     expect(sent?.text).toContain("https://meet.google.com/test-room");
     expect(sent?.html).toContain("Join Google Meet");
     expect(sent?.html).toContain("24-hour reminder");
+
+    await sendBookingCancellation(env, value);
+    expect(sent?.to).toBe("visitor@example.com");
+    expect(sent?.subject).toBe("Cancelled: your consultation with Oskar Ablimit");
+    expect(sent?.text).toContain("Please remove the event from your calendar");
   });
 });
 
@@ -228,7 +233,7 @@ describe("agent controls", () => {
     expect(VISITOR_PROMPT).toContain("Never suggest “Add Oskar”");
     expect(OWNER_PROMPT).toContain("private portfolio content agent");
     expect(OWNER_PROMPT).toContain("Never invent credentials");
-    expect(OWNER_PROMPT).toContain("add, reschedule, or cancel open availability");
+    expect(OWNER_PROMPT).toContain("cancel either open availability or a confirmed booking");
     expect(OWNER_PROMPT).toContain("require Oskar's explicit confirmation");
     expect(OWNER_PROMPT).toContain("always use admin_list_calendar");
     expect(OWNER_PROMPT).toContain("external Google Calendar appointment schedule is retired");
@@ -249,7 +254,7 @@ describe("agent controls", () => {
   });
 
   it("gives the owner agent consultation calendar management tools", () => {
-    const names = createOwnerTools({} as D1Database).map((tool) => tool.name);
+    const names = createOwnerTools({ DB: {} as D1Database, NOTIFICATION_EMAIL: {} as SendEmail }).map((tool) => tool.name);
     expect(names).toEqual(expect.arrayContaining([
       "admin_list_calendar",
       "admin_create_calendar_slot",
@@ -260,6 +265,18 @@ describe("agent controls", () => {
 
   it("rejects invalid agent-created availability before accessing D1", async () => {
     await expect(createSlot({} as D1Database, "not-a-date", "also-not-a-date")).rejects.toThrow("Choose a future start");
+  });
+
+  it("atomically cancels a confirmed booking and its calendar slot", async () => {
+    const statements: string[] = [];
+    const confirmed = { id: "booking-1", slot_id: "slot-1", workspace_id: "workspace-1", name: "Visitor", email: "visitor@example.com", topic: "Review", status: "confirmed", starts_at: "2030-01-02T15:00:00.000Z", ends_at: "2030-01-02T15:30:00.000Z", created_at: "2030-01-01T12:00:00.000Z" };
+    const db = {
+      prepare: (sql: string) => ({ bind: () => ({ sql, first: async () => confirmed }) }),
+      batch: async (items: Array<{ sql: string }>) => { statements.push(...items.map((item) => item.sql)); return [{ meta: { changes: 1 } }, { meta: { changes: 1 } }]; },
+    } as unknown as D1Database;
+    const cancellation = await cancelSlot(db, "slot-1");
+    expect(cancellation?.booking?.status).toBe("cancelled");
+    expect(statements).toEqual(expect.arrayContaining([expect.stringContaining("UPDATE calendar_bookings"), expect.stringContaining("UPDATE calendar_slots")]));
   });
 
   it("allows visitor agents to use approved skills without authoring them", () => {

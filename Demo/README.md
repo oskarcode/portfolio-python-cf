@@ -43,8 +43,8 @@ Anonymous chat sends bounded message history directly to Workers AI and keeps st
 | Cloudflare Computer + Worker Loader | Git-versioned skill filesystem and isolated Worker Shell execution |
 | Durable Object alarms | One-time scheduled workspace instructions |
 | Cloudflare Access | Production authentication boundary for `/admin*` and `/api/admin/*` |
-| Cloudflare Email Service | Transactional owner alerts and visitor booking confirmations |
-| D1 calendar + Google Meet | Admin-managed availability, collision-safe booking, fixed meeting room, and downloadable `.ics` reminders |
+| Cloudflare Email Service | Transactional owner alerts, visitor booking confirmations, and cancellation notices |
+| D1 calendar + Google Meet | Admin-managed availability, collision-safe booking and cancellation, fixed meeting room, and downloadable `.ics` reminders |
 | R2 | Bound media bucket reserved for portfolio uploads |
 
 ## Project Structure

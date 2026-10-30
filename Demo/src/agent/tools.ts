@@ -4,7 +4,7 @@ import { defineTool } from "@earendil-works/pi-durable";
 import { getSection, listSections, saveSection } from "../data/content";
 import { getPost, listPosts, savePost } from "../data/blog";
 import { cancelSlot, createBooking, createSlot, listCalendar, listOpenSlots, rescheduleSlot } from "../data/calendar";
-import { notifyOwnerOfBooking, sendBookingConfirmation } from "../notifications/email";
+import { notifyOwnerOfBooking, sendBookingCancellation, sendBookingConfirmation } from "../notifications/email";
 
 const output = (value: unknown) => ({ output: [{ type: "text" as const, text: JSON.stringify(value) }] });
 
@@ -69,7 +69,8 @@ export function createPortfolioTools(env: Pick<Env, "DB" | "NOTIFICATION_EMAIL" 
  * What this function does:
  * - It constructs and persists a new record.
  */
-export function createOwnerTools(db: D1Database) {
+export function createOwnerTools(env: Pick<Env, "DB" | "NOTIFICATION_EMAIL">) {
+  const db = env.DB;
   const listAll = defineTool({
     name: "admin_list_content",
     description: "List all portfolio sections and blog posts, including drafts.",
@@ -118,11 +119,20 @@ export function createOwnerTools(db: D1Database) {
   });
   const removeCalendarSlot = defineTool({
     name: "admin_cancel_calendar_slot",
-    description: "Remove one open consultation time after Oskar explicitly confirms the slot ID. Confirmed bookings cannot be cancelled with this tool. This writes immediately.",
+    description: "Cancel one open consultation time or confirmed booking after Oskar explicitly confirms the exact slot. Cancelling a confirmed booking also emails the visitor and retains the cancelled record for audit history. This writes immediately.",
     parameters: Type.Object({ slotId: Type.String() }),
     execute: async ({ slotId }) => {
-      if (!(await cancelSlot(db, slotId))) throw new Error("Only open consultation times can be cancelled.");
-      return output({ cancelled: true, slotId });
+      const cancellation = await cancelSlot(db, slotId);
+      if (!cancellation) throw new Error("That calendar slot is already cancelled, missing, or changed before cancellation.");
+      let cancellationEmail: "not-needed" | "sent" | "failed" = "not-needed";
+      if (cancellation.booking) {
+        try { await sendBookingCancellation(env, cancellation.booking); cancellationEmail = "sent"; }
+        catch (error) {
+          cancellationEmail = "failed";
+          console.error(JSON.stringify({ event: "booking_cancellation_email_failed", bookingId: cancellation.booking.id, error: error instanceof Error ? error.message : String(error) }));
+        }
+      }
+      return output({ cancelled: true, slotId, bookingId: cancellation.booking?.id ?? null, cancellationEmail });
     },
   });
   return [listAll, upsertSection, upsertPost, listAdminCalendar, addCalendarSlot, editCalendarSlot, removeCalendarSlot] as const;

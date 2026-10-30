@@ -56,6 +56,20 @@ export async function sendBookingConfirmation(env: Pick<Env, "NOTIFICATION_EMAIL
   });
 }
 
+/** Notify a visitor that Oskar cancelled a previously confirmed consultation. */
+export async function sendBookingCancellation(env: Pick<Env, "NOTIFICATION_EMAIL">, input: {
+  name: string; email: string; topic: string; startsAt: string; endsAt: string;
+}): Promise<void> {
+  const when = utcMeetingTime(input.startsAt, input.endsAt);
+  await env.NOTIFICATION_EMAIL.send({
+    from: { email: "calendar@oskarcode.com", name: "Oskar Ablimit" },
+    to: input.email,
+    subject: "Cancelled: your consultation with Oskar Ablimit",
+    text: `Hi ${input.name},\n\nYour consultation with Oskar Ablimit has been cancelled.\n\nDATE AND TIME\n${when}\n\nTOPIC\n${input.topic}\n\nPlease remove the event from your calendar. Reply to your private workspace conversation if you would like to discuss another time.\n\nOskar`,
+    html: `<div style="margin:0;padding:32px 16px;background:#f3f6f8;color:#172b3a;font-family:Arial,sans-serif"><div style="max-width:620px;margin:0 auto;overflow:hidden;border:1px solid #d8e0e5;border-radius:12px;background:#ffffff"><div style="padding:28px 32px;background:#0f1b24;color:#ffffff"><div style="margin-bottom:14px;color:#f6821f;font-size:12px;font-weight:700;letter-spacing:.08em">MEETING CANCELLED</div><h1 style="margin:0;font-size:27px;line-height:1.2">Your consultation with Oskar has been cancelled</h1></div><div style="padding:30px 32px"><p style="margin:0 0 22px;font-size:16px;line-height:1.6">Hi ${escapeHtml(input.name)},<br>This meeting is no longer scheduled.</p><div style="margin:0 0 22px;padding:20px;border:1px solid #e1e7eb;border-radius:8px;background:#f8fafb"><div style="margin-bottom:6px;color:#697b88;font-size:11px;font-weight:700;letter-spacing:.06em">ORIGINAL DATE AND TIME</div><div style="font-size:17px;font-weight:700;line-height:1.5">${escapeHtml(when)}</div><div style="margin:18px 0 6px;color:#697b88;font-size:11px;font-weight:700;letter-spacing:.06em">TOPIC</div><div style="font-size:15px;line-height:1.5">${escapeHtml(input.topic)}</div></div><p style="margin:0;font-size:14px;line-height:1.6">Please remove the event from your calendar. You can reply in your private workspace if you would like to discuss another time.</p></div></div></div>`,
+  });
+}
+
 /**
  * Input:
  * - The typed values shown in notifyOwnerOfBooking’s signature.

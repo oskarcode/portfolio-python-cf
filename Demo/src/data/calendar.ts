@@ -97,11 +97,20 @@ export async function rescheduleSlot(db: D1Database, id: string, startsAt: strin
  * Output:
  * - The declared value or Promise; failures follow the caller’s existing boundary.
  * What this function does:
- * - It marks an open slot cancelled without changing a confirmed booking.
+ * - It atomically cancels either open availability or its confirmed booking while retaining an audit record.
  */
-export async function cancelSlot(db: D1Database, id: string): Promise<boolean> {
+export async function cancelSlot(db: D1Database, id: string): Promise<{ slotId: string; booking: CalendarBooking | null } | null> {
+  const confirmed = await db.prepare("SELECT b.id, b.slot_id, b.workspace_id, b.name, b.email, b.topic, b.status, s.starts_at, s.ends_at, b.created_at FROM calendar_bookings b JOIN calendar_slots s ON s.id = b.slot_id WHERE s.id = ? AND s.status = 'booked' AND b.status = 'confirmed'").bind(id).first<BookingRow>();
+  if (confirmed) {
+    const [bookingResult, slotResult] = await db.batch([
+      db.prepare("UPDATE calendar_bookings SET status = 'cancelled', updated_at = CURRENT_TIMESTAMP WHERE slot_id = ? AND status = 'confirmed'").bind(id),
+      db.prepare("UPDATE calendar_slots SET status = 'cancelled', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'booked' AND EXISTS (SELECT 1 FROM calendar_bookings WHERE slot_id = ? AND status = 'cancelled')").bind(id, id),
+    ]);
+    if (bookingResult.meta.changes === 0 || slotResult.meta.changes === 0) return null;
+    return { slotId: id, booking: { ...booking(confirmed), status: "cancelled" } };
+  }
   const result = await db.prepare("UPDATE calendar_slots SET status = 'cancelled', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'open'").bind(id).run();
-  return result.meta.changes > 0;
+  return result.meta.changes > 0 ? { slotId: id, booking: null } : null;
 }
 
 /**

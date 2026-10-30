@@ -12,7 +12,7 @@ import type { BlogPost, ChatMessage, Lead, SiteSection } from "./shared/types";
 import type { SaveSkillInput } from "./skills/types";
 import { claimWorkspaceOnboarding, createAdminWorkspace, deleteManagedWorkspaceRecord, initializeWorkspaceCapabilities, listAdminWorkspaces, managedWorkspace, markWorkspaceInvitation, releaseWorkspaceOnboarding, saveWorkspaceCapabilities, saveWorkspaceGuest, touchWorkspacePresence, workspaceCapabilities, workspaceGuest, workspacePresence } from "./data/workspaces";
 import type { WorkspaceCapabilities } from "./shared/types";
-import { notifyOwnerOfBooking, notifyOwnerOfHandoff, sendBookingConfirmation, sendWorkspaceInvitation } from "./notifications/email";
+import { notifyOwnerOfBooking, notifyOwnerOfHandoff, sendBookingCancellation, sendBookingConfirmation, sendWorkspaceInvitation } from "./notifications/email";
 import { bookingIcs } from "./calendar/ics";
 import { cancelSlot, createBooking, createSlot, getBooking, listCalendar, listOpenSlots } from "./data/calendar";
 
@@ -302,8 +302,17 @@ app.post("/api/admin/calendar/slots", async (c) => {
   catch (error) { return c.json({ error: error instanceof Error ? error.message : "Could not add this time" }, 409); }
 });
 app.delete("/api/admin/calendar/slots/:id", async (c) => {
-  const cancelled = await cancelSlot(c.env.DB, c.req.param("id"));
-  return cancelled ? c.json({ cancelled: true }) : c.json({ error: "Only open times can be removed" }, 409);
+  const cancellation = await cancelSlot(c.env.DB, c.req.param("id"));
+  if (!cancellation) return c.json({ error: "That time is already cancelled, missing, or changed before cancellation" }, 409);
+  let cancellationEmail: "not-needed" | "sent" | "failed" = "not-needed";
+  if (cancellation.booking) {
+    try { await sendBookingCancellation(c.env, cancellation.booking); cancellationEmail = "sent"; }
+    catch (error) {
+      cancellationEmail = "failed";
+      console.error(JSON.stringify({ event: "booking_cancellation_email_failed", bookingId: cancellation.booking.id, error: error instanceof Error ? error.message : String(error) }));
+    }
+  }
+  return c.json({ cancelled: true, bookingId: cancellation.booking?.id ?? null, cancellationEmail });
 });
 /**
  * Input:

@@ -35,7 +35,7 @@ export const api = {
   adminContent: () => request<{ sections: SiteSection[]; posts: BlogPost[] }>("/api/admin/content"),
   adminCalendar: () => request<{ slots: CalendarSlot[]; bookings: CalendarBooking[] }>("/api/admin/calendar"),
   createCalendarSlot: (startsAt: string, endsAt: string) => request<CalendarSlot>("/api/admin/calendar/slots", { method: "POST", body: JSON.stringify({ startsAt, endsAt }) }),
-  cancelCalendarSlot: (id: string) => request<{ cancelled: boolean }>(`/api/admin/calendar/slots/${encodeURIComponent(id)}`, { method: "DELETE" }),
+  cancelCalendarSlot: (id: string) => request<{ cancelled: boolean; bookingId: string | null; cancellationEmail: "not-needed" | "sent" | "failed" }>(`/api/admin/calendar/slots/${encodeURIComponent(id)}`, { method: "DELETE" }),
   skills: () => request<{ skills: SkillSummary[] }>("/api/admin/skills"),
   skill: (slug: string) => request<SkillRecord>(`/api/admin/skills/${encodeURIComponent(slug)}`),
   saveSkill: (input: SaveSkillInput, existing = false) => request<SkillRecord>(existing ? `/api/admin/skills/${encodeURIComponent(input.slug)}` : "/api/admin/skills", { method: existing ? "PUT" : "POST", body: JSON.stringify(input) }),

@@ -72,9 +72,16 @@ export function AdminCalendar() {
    * Output:
    * - The declared value or Promise; failures follow the caller’s existing boundary.
    * What this function does:
-   * - It cancels one open slot and reloads the schedule.
+   * - It cancels open availability or a confirmed booking and reloads the schedule.
    */
-  const remove = async (id: string) => { try { await api.cancelCalendarSlot(id); await load(); } catch (error) { setNotice(error instanceof Error ? error.message : "Could not remove time"); } };
+  const remove = async (id: string, reserved?: CalendarBooking) => {
+    if (reserved && !window.confirm(`Cancel ${reserved.name}'s confirmed booking and email them?`)) return;
+    try {
+      const result = await api.cancelCalendarSlot(id);
+      setNotice(reserved ? `Booking cancelled. Visitor email ${result.cancellationEmail}.` : "Bookable time removed.");
+      await load();
+    } catch (error) { setNotice(error instanceof Error ? error.message : "Could not remove time"); }
+  };
   /**
    * Input:
    * - The typed values shown in bookingFor’s signature.
@@ -84,5 +91,5 @@ export function AdminCalendar() {
    * - It finds the confirmed booking associated with a displayed slot.
    */
   const bookingFor = (id: string) => bookings.find((item) => item.slotId === id && item.status === "confirmed");
-  return <div className="admin-calendar"><section className="calendar-create"><span className="eyebrow">AVAILABILITY</span><h2>Add a bookable time</h2><p>Times use your browser’s timezone. Visitors see them in their own local timezone.</p><form onSubmit={add}><label>Start<input type="datetime-local" required value={start} onChange={(event) => setStart(event.target.value)}/></label><label>Duration<select value={duration} onChange={(event) => setDuration(Number(event.target.value))}><option value={30}>30 minutes</option><option value={45}>45 minutes</option><option value={60}>60 minutes</option></select></label><button className="button primary">Add time</button></form>{notice && <div className="notice">{notice}</div>}</section><section className="calendar-schedule"><header><div><span className="eyebrow">UPCOMING</span><h2>Schedule</h2></div><strong>{slots.filter((item) => item.status === "open").length} open</strong></header>{slots.length === 0 ? <p>No upcoming times yet.</p> : <div>{slots.map((slot) => { const reserved = bookingFor(slot.id); return <article className={slot.status} key={slot.id}><time>{format(slot.startsAt)}</time><span>{Math.round((new Date(slot.endsAt).valueOf() - new Date(slot.startsAt).valueOf()) / 60_000)} min</span><div>{reserved ? <><strong>{reserved.name}</strong><small>{reserved.email} · {reserved.topic}</small></> : <><strong>{slot.status === "open" ? "Available" : "Removed"}</strong><small>{slot.status === "open" ? "Visible in visitor chat" : "Not bookable"}</small></>}</div>{slot.status === "open" && <button onClick={() => void remove(slot.id)}>Remove</button>}</article>; })}</div>}</section></div>;
+  return <div className="admin-calendar"><section className="calendar-create"><span className="eyebrow">AVAILABILITY</span><h2>Add a bookable time</h2><p>Times use your browser’s timezone. Visitors see them in their own local timezone.</p><form onSubmit={add}><label>Start<input type="datetime-local" required value={start} onChange={(event) => setStart(event.target.value)}/></label><label>Duration<select value={duration} onChange={(event) => setDuration(Number(event.target.value))}><option value={30}>30 minutes</option><option value={45}>45 minutes</option><option value={60}>60 minutes</option></select></label><button className="button primary">Add time</button></form>{notice && <div className="notice">{notice}</div>}</section><section className="calendar-schedule"><header><div><span className="eyebrow">UPCOMING</span><h2>Schedule</h2></div><strong>{slots.filter((item) => item.status === "open").length} open</strong></header>{slots.length === 0 ? <p>No upcoming times yet.</p> : <div>{slots.map((slot) => { const reserved = bookingFor(slot.id); return <article className={slot.status} key={slot.id}><time>{format(slot.startsAt)}</time><span>{Math.round((new Date(slot.endsAt).valueOf() - new Date(slot.startsAt).valueOf()) / 60_000)} min</span><div>{reserved ? <><strong>{reserved.name}</strong><small>{reserved.email} · {reserved.topic}</small></> : <><strong>{slot.status === "open" ? "Available" : "Removed"}</strong><small>{slot.status === "open" ? "Visible in visitor chat" : "Not bookable"}</small></>}</div>{(slot.status === "open" || reserved) && <button onClick={() => void remove(slot.id, reserved)}>{reserved ? "Cancel booking" : "Remove"}</button>}</article>; })}</div>}</section></div>;
 }
