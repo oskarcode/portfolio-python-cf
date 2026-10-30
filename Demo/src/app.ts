@@ -99,6 +99,7 @@ app.post("/api/chat", async (c) => {
     (message.role === "user" || message.role === "assistant") && typeof message.content === "string" && message.content.length <= 4_000,
   );
   if (messages.length === 0) return c.json({ error: "No valid messages" }, 400);
+  if (messages.at(-1)?.role !== "user") return c.json({ error: "The latest anonymous message must come from the visitor" }, 400);
   return c.json({ answer: await anonymousChat(c.env, messages) });
 });
 

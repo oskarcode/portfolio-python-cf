@@ -28,7 +28,7 @@ Browser route
   -> updated website, transcript, or admin workspace
 ```
 
-Anonymous chat sends bounded message history directly to Workers AI and keeps state only in React memory. A consented handoff creates a D1 lead and a named `PortfolioSession` Durable Object. Admin workspaces use the same durable agent runtime, while D1 controls which skills and tools are available in each workspace.
+Anonymous chat sends bounded browser history through a request-scoped Pi harness backed by `MemoryStorage`, then closes and discards that server-side state. A consented handoff creates a D1 lead and a named `PortfolioSession` Durable Object. Admin workspaces use the same agent framework with durable SQLite storage, while D1 controls which skills and tools are available in each workspace.
 
 ## Technology Stack
 
@@ -37,7 +37,7 @@ Anonymous chat sends bounded message history directly to Workers AI and keeps st
 | Cloudflare Workers + Hono | HTTP API, validation, routing, and error mapping |
 | React + Vite + Static Assets | Website, blog, visitor chat, admin workspace, and Skill Hub |
 | Workers AI + AI Gateway | GLM 5.2 inference, web search, and web-page conversion |
-| Pi Durable | Durable transcripts, agent tool execution, tasks, and recovery |
+| Pi harness | Ephemeral anonymous turns plus durable workspace transcripts, tool execution, tasks, and recovery |
 | Durable Objects SQLite | One persistent `PortfolioSession` per workspace and one global `SkillHub` |
 | D1 | Portfolio content, posts, revisions, leads, invited workspace members, workspace catalog records, and capability attachments |
 | Cloudflare Computer + Worker Loader | Git-versioned skill filesystem and isolated Worker Shell execution |
@@ -52,7 +52,7 @@ Anonymous chat sends bounded message history directly to Workers AI and keeps st
 | Path | Purpose |
 | --- | --- |
 | `src/app.ts` | All Hono HTTP routes and admin authorization middleware |
-| `src/agent/` | Prompts, model calls, Pi Durable session, tools, web access, and scheduling |
+| `src/agent/` | Shared Pi model setup, ephemeral anonymous harness, durable sessions, tools, web access, and scheduling |
 | `src/data/` | D1 repositories for content, posts, leads, and workspaces |
 | `src/skills/` | Cloudflare Computer Skill Hub, skill contracts, and agent tools |
 | `src/client/` | React views, components, typed API client, and styling |
@@ -131,7 +131,7 @@ npm run deploy
 ## Security Notes
 
 - Cloudflare Access must protect both `/admin*` and `/api/admin/*`; hiding admin links is not authorization.
-- Anonymous chat is stateless on the server but still sends bounded conversation content to Workers AI.
+- Anonymous chat uses a fresh Pi `MemoryStorage` per request; the harness is closed after the answer, while bounded conversation content still reaches Workers AI through AI Gateway.
 - `/chat/:workspaceId` is an opaque capability URL. Anyone holding it can access that visitor workspace.
 - Persistent storage begins only after explicit consent and contact validation.
 - Consultation booking requires an active persistent workspace; the booking route reads name, email, and topic from D1 rather than accepting browser-supplied identity fields.

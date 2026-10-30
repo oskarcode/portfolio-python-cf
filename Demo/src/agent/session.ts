@@ -2,8 +2,6 @@
 // Cloudflare and Pi Durable imports provide the platform class, durable harness, entries, model adapter, and storage backend.
 import { DurableObject } from "cloudflare:workers";
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
-import { createModels } from "@earendil-works/pi-ai/models";
-import { createAI } from "agents/models/pi-ai";
 import {
   AssistantEntry,
   createRegistry,
@@ -24,8 +22,7 @@ import { createWebTools } from "./web-tools";
 import { activeSchedule, createScheduleTools, DeliverScheduledInstruction, matchesSchedule, scheduledDeadline, type ScheduledInstruction } from "./scheduling";
 import { managedWorkspace, workspaceCapabilities, workspaceGuest } from "../data/workspaces";
 import { workspaceRecord } from "../data/leads";
-
-const MODEL = "@cf/zai-org/glm-5.2";
+import { createPortfolioModels, messageText, PORTFOLIO_MODEL } from "./harness";
 
 type WorkspaceMessageData = {
   text: string;
@@ -37,24 +34,6 @@ type WorkspaceMessageData = {
 
 const WorkspaceMessageEntry = defineEntry<WorkspaceMessageData>("portfolio.workspace-message");
 const WorkspaceAgentRequestEntry = defineEntry<WorkspaceMessageData>("portfolio.agent-request");
-
-/**
- * Input:
- * - The typed parameters shown in the function signature.
- * Output:
- * - The declared return value or Promise; thrown errors follow the caller.
- * What this function does:
- * - It owns the messageText operation for this module.
- */
-function messageText(value: unknown): string {
-  if (typeof value === "string") return value;
-  if (!Array.isArray(value)) return "";
-  return value.map((part) => {
-    if (typeof part === "string") return part;
-    if (typeof part === "object" && part !== null && "text" in part && typeof part.text === "string") return part.text;
-    return "";
-  }).join("");
-}
 
 /** PortfolioSession owns this Durable Object lifecycle, its collaborators, and its persisted workspace state. */
 export class PortfolioSession extends DurableObject<Env> {
@@ -100,9 +79,7 @@ export class PortfolioSession extends DurableObject<Env> {
    */
   async #initialize(): Promise<void> {
     const storage = await openDurableObjectSqliteStorage(this.ctx.storage);
-    const models = createModels();
-    const workersAI = createAI({ binding: this.env.AI, id: this.env.AI_GATEWAY_ID });
-    models.setProvider(workersAI.provider);
+    const models = createPortfolioModels(this.env);
     const publicTools = createPortfolioTools(this.env);
     const ownerTools = createOwnerTools(this.env);
     const skillHub = this.env.SKILL_HUB.getByName("global");
@@ -186,14 +163,14 @@ export class PortfolioSession extends DurableObject<Env> {
     const instructions = `${owner ? OWNER_PROMPT : VISITOR_PROMPT}\n\n${workspaceContext}\n${toolContext}\n\n${skillCatalog}`;
     const conversation = await this.#harness.root(BACKGROUND_CONTEXT, {
       agent: {
-        model: { provider: "cloudflare", modelId: MODEL },
+        model: { provider: "cloudflare", modelId: PORTFOLIO_MODEL },
         thinkingLevel: "high",
         tools,
         instructions,
       },
     });
     await conversation.configure({
-      model: { provider: "cloudflare", modelId: MODEL },
+      model: { provider: "cloudflare", modelId: PORTFOLIO_MODEL },
       thinkingLevel: "high",
       tools,
       instructions,
