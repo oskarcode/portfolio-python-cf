@@ -102,7 +102,7 @@ export function createOwnerTools(env: Pick<Env, "DB" | "NOTIFICATION_EMAIL">) {
   });
   const saveDynamicPost = defineTool({
     name: "admin_save_dynamic_blog",
-    description: "Create or update a draft blog as a complete isolated frontend. Write a single self-contained JavaScript Worker module that exports a default fetch handler and returns the full responsive HTML/CSS/JS experience. Inline every style, script, and required asset; network access and external browser resources are blocked. Save only as a draft; use admin_publish_dynamic_blog after Oskar reviews the preview.",
+    description: "Create or update a draft blog as a complete isolated frontend. Write a single self-contained JavaScript Worker module that exports a default fetch handler and returns the full responsive HTML/CSS/JS experience. Inline every style, script, and required asset; network access and external browser resources are blocked. Design it as an immersive iframe viewport with its own title, readable navigation, responsive internal scrolling, and no dependency on the portfolio page around it. Save only as a draft; use admin_publish_dynamic_blog after Oskar reviews the preview.",
     parameters: Type.Object({
       id: Type.String(), slug: Type.String(), title: Type.String(), summary: Type.Union([Type.String(), Type.Null()]),
       contentMarkdown: Type.String({ description: "Plain-text or Markdown fallback and searchable article content." }),
