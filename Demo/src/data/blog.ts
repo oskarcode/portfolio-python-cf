@@ -5,7 +5,10 @@ interface BlogRow {
   id: string; slug: string; title: string; excerpt: string | null; content_markdown: string;
   cover_image_url: string | null; tags_json: string; status: BlogPost["status"];
   source: BlogPost["source"]; source_url: string | null; published_at: string | null; updated_at: string;
+  render_mode?: BlogPost["renderMode"]; draft_worker_revision_id?: string | null; published_worker_revision_id?: string | null;
 }
+
+type BlogPostWrite = Omit<BlogPost, "updatedAt" | "renderMode" | "draftWorkerRevisionId" | "publishedWorkerRevisionId"> & Partial<Pick<BlogPost, "renderMode" | "draftWorkerRevisionId" | "publishedWorkerRevisionId">>;
 
 const parseTags = (value: string): string[] => {
   try { const parsed: unknown = JSON.parse(value); return Array.isArray(parsed) ? parsed.filter((tag): tag is string => typeof tag === "string") : []; }
@@ -16,7 +19,9 @@ const toPost = (row: BlogRow): BlogPost => ({
   id: row.id, slug: row.slug, title: row.title, excerpt: row.excerpt,
   contentMarkdown: row.content_markdown, coverImageUrl: row.cover_image_url,
   tags: parseTags(row.tags_json), status: row.status, source: row.source,
-  sourceUrl: row.source_url, publishedAt: row.published_at, updatedAt: row.updated_at,
+  sourceUrl: row.source_url, publishedAt: row.published_at,
+  renderMode: row.render_mode ?? "article", draftWorkerRevisionId: row.draft_worker_revision_id ?? null,
+  publishedWorkerRevisionId: row.published_worker_revision_id ?? null, updatedAt: row.updated_at,
 });
 
 /**
@@ -55,7 +60,7 @@ export async function getPost(db: D1Database, slug: string, includeDrafts = fals
  * What this function does:
  * - It validates and persists the requested state.
  */
-export async function savePost(db: D1Database, input: Omit<BlogPost, "updatedAt">, actor: string): Promise<BlogPost> {
+export async function savePost(db: D1Database, input: BlogPostWrite, actor: string): Promise<BlogPost> {
   const existing = await db.prepare("SELECT * FROM blog_posts WHERE id = ?").bind(input.id).first<BlogRow>();
   const now = new Date().toISOString();
   const revision = existing
@@ -72,7 +77,7 @@ export async function savePost(db: D1Database, input: Omit<BlogPost, "updatedAt"
     .bind(input.id, input.slug, input.title, input.excerpt, input.contentMarkdown, input.coverImageUrl,
       JSON.stringify(input.tags), input.status, input.source, input.sourceUrl, input.publishedAt, now, now);
   await db.batch(revision ? [revision, upsert] : [upsert]);
-  return { ...input, updatedAt: now };
+  return { ...input, renderMode: input.renderMode ?? existing?.render_mode ?? "article", draftWorkerRevisionId: input.draftWorkerRevisionId ?? existing?.draft_worker_revision_id ?? null, publishedWorkerRevisionId: input.publishedWorkerRevisionId ?? existing?.published_worker_revision_id ?? null, updatedAt: now };
 }
 
 const text = (value: string): string => value.replace(/<!\[CDATA\[|\]\]>/g, "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();

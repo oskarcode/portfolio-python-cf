@@ -12,6 +12,7 @@ import { cancelSlot, createSlot } from "../src/data/calendar";
 import { deleteWorkspaceRecord } from "../src/data/leads";
 import { listAdminWorkspaces } from "../src/data/workspaces";
 import { messageText, PORTFOLIO_MODEL } from "../src/agent/harness";
+import { renderDynamicBlog } from "../src/blog/runtime";
 
 describe("API boundaries", () => {
   it("protects admin APIs when Cloudflare Access identity is absent", async () => {
@@ -43,6 +44,11 @@ describe("API boundaries", () => {
     }, {} as Env);
     expect(response.status).toBe(400);
     expect(await response.json()).toEqual({ error: "The latest anonymous message must come from the visitor" });
+  });
+
+  it("blocks dynamic blog runtimes outside their sandboxed iframe", async () => {
+    const response = await app.request("https://portfolio.example.com/api/blog-runtime/example", {}, {} as Env);
+    expect(response.status).toBe(403);
   });
 
   it("requires a persistent workspace before a consultation can be booked", async () => {
@@ -276,7 +282,25 @@ describe("agent controls", () => {
       "admin_create_calendar_slot",
       "admin_reschedule_calendar_slot",
       "admin_cancel_calendar_slot",
+      "admin_save_dynamic_blog",
+      "admin_list_dynamic_blog_revisions",
+      "admin_publish_dynamic_blog",
     ]));
+  });
+
+  it("loads a published blog through a versioned isolated Dynamic Worker", async () => {
+    let workerId = "";
+    let loadedCode: WorkerLoaderWorkerCode | undefined;
+    const stub = { getEntrypoint: () => ({ fetch: async () => new Response("<h1>Dynamic article</h1>") }) };
+    const loader = {
+      get: (id: string, callback: () => WorkerLoaderWorkerCode) => { workerId = id; loadedCode = callback(); return stub; },
+      load: () => stub,
+    } as unknown as WorkerLoader;
+    const response = await renderDynamicBlog(loader, { id: "revision-1", postId: "post-1", workerSource: "export default { fetch() { return new Response('ok') } }", createdBy: "owner", createdAt: "2030-01-01", publishedAt: "2030-01-01" }, new Request("https://portfolio.example.com/api/blog-runtime/post"), true);
+    expect(workerId).toBe("blog:post-1:revision-1");
+    expect(loadedCode?.globalOutbound).toBeNull();
+    expect(response.headers.get("Content-Security-Policy")).toContain("connect-src 'none'");
+    expect(response.headers.get("Cache-Control")).toContain("public");
   });
 
   it("rejects invalid agent-created availability before accessing D1", async () => {

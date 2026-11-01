@@ -15,6 +15,7 @@ A Cloudflare-native professional portfolio that combines a technical website, lo
 - Tracks invitation delivery, first join, and approximate owner/guest online presence through workspace heartbeats.
 - Stores reusable skill files in a durable Cloudflare Computer workspace and runs approved Worker Shell commands.
 - Lets the private content agent update portfolio sections and blog posts with revision history.
+- Lets the owner agent generate complete per-post HTML/CSS/JavaScript frontends, preview them in a browser sandbox, and publish immutable revisions through isolated Dynamic Workers.
 
 ## How It Works
 
@@ -40,7 +41,7 @@ Anonymous chat sends bounded browser history through a request-scoped Pi harness
 | Pi harness | Ephemeral anonymous turns plus durable workspace transcripts, tool execution, tasks, and recovery |
 | Durable Objects SQLite | One persistent `PortfolioSession` per workspace and one global `SkillHub` |
 | D1 | Portfolio content, posts, revisions, leads, invited workspace members, workspace catalog records, and capability attachments |
-| Cloudflare Computer + Worker Loader | Git-versioned skill filesystem and isolated Worker Shell execution |
+| Cloudflare Computer + Worker Loader | Git-versioned skill execution and versioned Dynamic Worker blog frontends |
 | Durable Object alarms | One-time scheduled workspace instructions |
 | Cloudflare Access | Production authentication boundary for `/admin*` and `/api/admin/*` |
 | Cloudflare Email Service | Transactional owner alerts, visitor booking confirmations, and cancellation notices |
@@ -71,7 +72,8 @@ Generated or downloaded directories such as `node_modules/`, `dist/`, and `.wran
 | --- | --- | --- |
 | `GET` | `/api/health` | Verify D1 and report configured services |
 | `GET` | `/api/content`, `/api/content/:slug` | Read published portfolio content |
-| `GET` | `/api/blog`, `/api/blog/:slug` | Read published local articles |
+| `GET` | `/api/blog`, `/api/blog/:slug` | Read published local article metadata |
+| `GET` | `/api/blog-runtime/:slug` | Run one published dynamic article inside its sandboxed iframe |
 | `POST` | `/api/chat` | Stateless anonymous portfolio answer |
 | `POST` | `/api/handoff` | Consent-based creation of a durable visitor workspace |
 | `GET` | `/api/calendar/slots` | List open consultation times |
@@ -136,6 +138,7 @@ npm run deploy
 - Persistent storage begins only after explicit consent and contact validation.
 - Consultation booking requires an active persistent workspace; the booking route reads name, email, and topic from D1 rather than accepting browser-supplied identity fields.
 - Transactional email is invoked only by fixed handoff and booking behavior; agents do not receive a generic email tool.
+- AI-authored dynamic blogs receive no bindings or outbound network access, run under CPU/subrequest limits, and are displayed only in sandboxed iframes without same-origin privileges.
 - Visitor-to-owner messages bypass model inference.
 - Workspace skill allowlists are checked by server-side tool implementations, not only by the UI.
 - Cloudflare Computer and Worker Loader are preview technologies. Commands execute in an isolated Worker Shell with a bounded command set and timeout.

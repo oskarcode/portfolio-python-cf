@@ -3,6 +3,7 @@ import { Type } from "@earendil-works/pi-ai";
 import { defineTool } from "@earendil-works/pi-durable";
 import { getSection, listSections, saveSection } from "../data/content";
 import { getPost, listPosts, savePost } from "../data/blog";
+import { listDynamicBlogRevisions, publishDynamicBlog, saveDynamicBlogDraft } from "../data/dynamic-blogs";
 import { cancelSlot, createBooking, createSlot, listCalendar, listOpenSlots, rescheduleSlot } from "../data/calendar";
 import { notifyOwnerOfBooking, sendBookingCancellation, sendBookingConfirmation } from "../notifications/email";
 
@@ -99,6 +100,37 @@ export function createOwnerTools(env: Pick<Env, "DB" | "NOTIFICATION_EMAIL">) {
     }),
     execute: async ({ summary, ...args }) => output(await savePost(db, { ...args, excerpt: summary }, "owner-agent")),
   });
+  const saveDynamicPost = defineTool({
+    name: "admin_save_dynamic_blog",
+    description: "Create or update a draft blog as a complete isolated frontend. Write a single self-contained JavaScript Worker module that exports a default fetch handler and returns the full responsive HTML/CSS/JS experience. Inline every style, script, and required asset; network access and external browser resources are blocked. Save only as a draft; use admin_publish_dynamic_blog after Oskar reviews the preview.",
+    parameters: Type.Object({
+      id: Type.String(), slug: Type.String(), title: Type.String(), summary: Type.Union([Type.String(), Type.Null()]),
+      contentMarkdown: Type.String({ description: "Plain-text or Markdown fallback and searchable article content." }),
+      coverImageUrl: Type.Union([Type.String(), Type.Null()]), tags: Type.Array(Type.String()),
+      sourceUrl: Type.Union([Type.String(), Type.Null()]), workerSource: Type.String({ minLength: 1, maxLength: 262_144 }),
+    }),
+    execute: async ({ summary, workerSource, ...args }) => {
+      const post = await savePost(db, { ...args, excerpt: summary, status: "draft", source: "native", publishedAt: null }, "owner-agent");
+      const value = await saveDynamicBlogDraft(db, post.id, workerSource, "owner-agent");
+      return output({ post, revision: { ...value, workerSource: undefined }, previewUrl: `/api/admin/blog/${encodeURIComponent(post.id)}/preview` });
+    },
+  });
+  const listDynamicRevisions = defineTool({
+    name: "admin_list_dynamic_blog_revisions",
+    description: "List immutable frontend revisions for one dynamic blog before publishing or rolling back.",
+    parameters: Type.Object({ postId: Type.String() }), replay: "safe",
+    execute: async ({ postId }) => output(await listDynamicBlogRevisions(db, postId)),
+  });
+  const publishDynamicPost = defineTool({
+    name: "admin_publish_dynamic_blog",
+    description: "Publish the latest draft or a selected prior frontend revision only after Oskar explicitly confirms publication. Selecting an older revision performs a rollback.",
+    parameters: Type.Object({ postId: Type.String(), revisionId: Type.Optional(Type.String()) }),
+    execute: async ({ postId, revisionId }) => {
+      const value = await publishDynamicBlog(db, postId, revisionId);
+      const post = (await listPosts(db, true)).find((item) => item.id === postId);
+      return output({ published: true, revisionId: value.id, publicUrl: post ? `/blog/${post.slug}` : null });
+    },
+  });
   const listAdminCalendar = defineTool({
     name: "admin_list_calendar",
     description: "List upcoming consultation availability and confirmed bookings, including visitor details. This is private owner-only calendar data.",
@@ -135,5 +167,5 @@ export function createOwnerTools(env: Pick<Env, "DB" | "NOTIFICATION_EMAIL">) {
       return output({ cancelled: true, slotId, bookingId: cancellation.booking?.id ?? null, cancellationEmail });
     },
   });
-  return [listAll, upsertSection, upsertPost, listAdminCalendar, addCalendarSlot, editCalendarSlot, removeCalendarSlot] as const;
+  return [listAll, upsertSection, upsertPost, saveDynamicPost, listDynamicRevisions, publishDynamicPost, listAdminCalendar, addCalendarSlot, editCalendarSlot, removeCalendarSlot] as const;
 }

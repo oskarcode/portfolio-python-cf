@@ -25,6 +25,9 @@ export interface BlogPost {
   source: "native" | "medium" | "imported";
   sourceUrl: string | null;
   publishedAt: string | null;
+  renderMode: "article" | "dynamic";
+  draftWorkerRevisionId: string | null;
+  publishedWorkerRevisionId: string | null;
   updatedAt: string;
 }
 

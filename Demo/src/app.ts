@@ -15,6 +15,8 @@ import type { WorkspaceCapabilities } from "./shared/types";
 import { notifyOwnerOfBooking, notifyOwnerOfHandoff, sendBookingCancellation, sendBookingConfirmation, sendWorkspaceInvitation } from "./notifications/email";
 import { bookingIcs } from "./calendar/ics";
 import { cancelSlot, createBooking, createSlot, getBooking, listCalendar, listOpenSlots } from "./data/calendar";
+import { getDraftDynamicBlog, getPublishedDynamicBlog } from "./data/dynamic-blogs";
+import { renderDynamicBlog } from "./blog/runtime";
 
 const app = new Hono<{ Bindings: Env }>();
 app.use("/api/*", cors({ origin: (origin) => origin, credentials: true }));
@@ -82,6 +84,12 @@ app.get("/api/blog", async (c) => c.json({ posts: await listPosts(c.env.DB) }));
 app.get("/api/blog/:slug", async (c) => {
   const post = await getPost(c.env.DB, c.req.param("slug"));
   return post ? c.json(post) : c.json({ error: "Not found" }, 404);
+});
+app.get("/api/blog-runtime/:slug", async (c) => {
+  if (c.req.header("Sec-Fetch-Dest") !== "iframe") return c.json({ error: "Dynamic blogs run only inside the sandboxed portfolio frame" }, 403);
+  const value = await getPublishedDynamicBlog(c.env.DB, c.req.param("slug"));
+  if (!value) return c.json({ error: "Dynamic blog not found" }, 404);
+  return renderDynamicBlog(c.env.SKILL_LOADER, value, c.req.raw, true);
 });
 
 /**
@@ -294,6 +302,18 @@ app.use("/api/admin/*", async (c, next) => {
  */
 app.get("/api/admin/me", (c) => c.json({ email: adminEmail(c.req.raw) ?? "local-development" }));
 app.get("/api/admin/calendar", async (c) => c.json(await listCalendar(c.env.DB)));
+app.get("/api/admin/blog/:id/preview-runtime", async (c) => {
+  if (c.req.header("Sec-Fetch-Dest") !== "iframe") return c.json({ error: "Dynamic previews run only inside the sandboxed preview frame" }, 403);
+  const value = await getDraftDynamicBlog(c.env.DB, c.req.param("id"));
+  if (!value) return c.json({ error: "Dynamic blog draft not found" }, 404);
+  return renderDynamicBlog(c.env.SKILL_LOADER, value, c.req.raw, false);
+});
+app.get("/api/admin/blog/:id/preview", async (c) => {
+  const value = await getDraftDynamicBlog(c.env.DB, c.req.param("id"));
+  if (!value) return c.json({ error: "Dynamic blog draft not found" }, 404);
+  const runtime = `/api/admin/blog/${encodeURIComponent(c.req.param("id"))}/preview-runtime`;
+  return c.html(`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Dynamic blog preview</title><style>html,body,iframe{width:100%;height:100%;margin:0;border:0}body{background:#0f1b24}iframe{display:block;background:white}</style></head><body><iframe title="Sandboxed dynamic blog preview" src="${runtime}" sandbox="allow-scripts"></iframe></body></html>`, 200, { "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; frame-src 'self'; base-uri 'none'", "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff" });
+});
 app.post("/api/admin/calendar/slots", async (c) => {
   const input = await c.req.json<{ startsAt?: string; endsAt?: string }>();
   const starts = input.startsAt ? new Date(input.startsAt) : null;
